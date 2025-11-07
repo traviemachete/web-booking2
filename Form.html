@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="th">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>แบบฟอร์มจองห้องประชุม</title>
+</head>
+
+<body>
+  <!-- Form.html -->
+  <div class="form-container">
+    <div class="form-header">
+      <h3 class="form-title">📝 แบบฟอร์มจองห้องประชุม</h3>
+      <p class="form-subtitle">กรุณากรอกข้อมูลให้ครบถ้วนเพื่อทำการจองห้องประชุม</p>
+    </div>
+
+    <form id="booking-form" onsubmit="return handleSubmit(event)">
+      <!-- Date and Time Section -->
+      <div class="form-section">
+        <h4 class="section-title">📅 วันที่และเวลา</h4>
+
+        <div class="form-group">
+          <label class="form-label" for="date">
+            <span class="label-text">วันที่ต้องการใช้ห้อง</span>
+            <span class="label-required">*</span>
+          </label>
+          <input type="date" name="date" id="date" class="form-input" required>
+          <div class="form-help">เลือกวันที่ต้องการจองห้องประชุม</div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="start">
+              <span class="label-text">เวลาเริ่ม</span>
+              <span class="label-required">*</span>
+            </label>
+            <input type="time" name="start" id="start" class="form-input" required>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="end">
+              <span class="label-text">เวลาสิ้นสุด</span>
+              <span class="label-required">*</span>
+            </label>
+            <input type="time" name="end" id="end" class="form-input" required>
+          </div>
+        </div>
+      </div>
+
+      <!-- Personal Information Section -->
+      <div class="form-section">
+        <h4 class="section-title">👤 ข้อมูลผู้จอง</h4>
+
+        <div class="form-group">
+          <label class="form-label" for="name">
+            <span class="label-text">ชื่อผู้จอง</span>
+            <span class="label-required">*</span>
+          </label>
+          <input type="text" name="name" id="name" class="form-input" required
+                 placeholder="เช่น นายสมชาย ใจดี">
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="department">
+              <span class="label-text">สังกัดฝ่าย</span>
+              <span class="label-required">*</span>
+            </label>
+            <input type="text" name="department" id="department" class="form-input" required
+                   placeholder="เช่น ฝ่ายไอที, ฝ่ายขาย">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="company">
+              <span class="label-text">สังกัดบริษัท</span>
+              <span class="label-required">*</span>
+            </label>
+            <select name="company" id="company" class="form-input" required>
+              <option value="">เลือกบริษัท</option>
+              <option value="Water POG">Water POG</option>
+              <option value="BIOAxel">BIOAxel</option>
+              <option value="Bygge">Bygge</option>
+              <option value="Benya">Benya</option>
+              <option value="M BARK">M BARK</option>
+              <option value="Farmpa Organic">Farmpa Organic</option>
+              <option value="อื่นๆ">อื่นๆ</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Meeting Details Section -->
+      <div class="form-section">
+        <h4 class="section-title">📋 รายละเอียดการประชุม</h4>
+
+        <div class="form-group">
+          <label class="form-label" for="purpose">
+            <span class="label-text">วัตถุประสงค์</span>
+            <span class="label-required">*</span>
+          </label>
+          <input type="text" name="purpose" id="purpose" class="form-input" required
+                 placeholder="เช่น ประชุมทีม, อบรม, สัมมนา, ประชุมลูกค้า">
+          <div class="form-help">ระบุวัตถุประสงค์ของการใช้ห้องประชุม</div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="email">
+            <span class="label-text">อีเมล</span>
+            <span class="label-required">*</span>
+          </label>
+          <input type="email" name="email" id="email" class="form-input" required
+                 placeholder="example@company.com">
+          <div class="form-help">สำหรับการติดต่อและการยืนยันการจอง</div>
+        </div>
+      </div>
+
+      <!-- Form Actions -->
+      <div class="form-actions">
+        <button type="button" class="btn btn-secondary" onclick="loadView('calendar')">
+          <span class="btn-icon">↩️</span>
+          <span class="btn-text">ย้อนกลับ</span>
+        </button>
+
+        <button type="submit" class="btn btn-primary" id="submit-btn">
+          <span class="btn-icon">💾</span>
+          <span class="btn-text">บันทึกการจอง</span>
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <style>
+    .form-container {
+      max-width: 700px;
+      margin: 0 auto;
+      background: var(--bg-color);
+      border-radius: var(--border-radius);
+      box-shadow: var(--shadow-1);
+      overflow: hidden;
+      max-height: calc(100vh - 48px);
+      overflow-y: auto;
+    }
+
+    .form-header {
+      background: var(--bg-secondary);
+      padding: 32px 32px 24px 32px;
+      border-bottom: 1px solid var(--border-color);
+      text-align: center;
+    }
+
+    .form-title {
+      font-size: 28px;
+      font-weight: 600;
+      color: var(--text-color);
+      margin: 0 0 8px 0;
+    }
+
+    .form-subtitle {
+      color: var(--text-secondary);
+      margin: 0;
+      font-size: 16px;
+      line-height: 1.5;
+    }
+
+    .form-section {
+      padding: 24px 32px;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .form-section:last-of-type {
+      border-bottom: none;
+    }
+
+    .section-title {
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--text-color);
+      margin: 0 0 20px 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    .form-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+
+    .form-label {
+      display: block;
+      font-weight: 500;
+      color: var(--text-color);
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .label-text {
+      font-size: 14px;
+    }
+
+    .label-required {
+      color: #ea4335;
+      font-weight: 600;
+    }
+
+    .form-input {
+      width: 100%;
+      padding: 12px 16px;
+      border: 2px solid var(--border-color);
+      border-radius: var(--border-radius);
+      background: var(--bg-color);
+      color: var(--text-color);
+      font-family: inherit;
+      font-size: 14px;
+      transition: var(--transition);
+    }
+
+    .form-input:focus {
+      outline: none;
+      border-color: var(--google-blue);
+      box-shadow: 0 0 0 3px rgba(26, 115, 232, 0.1);
+    }
+
+    .form-input:invalid {
+      border-color: #ea4335;
+    }
+
+    .form-input::placeholder {
+      color: var(--text-secondary);
+    }
+
+    .form-help {
+      font-size: 12px;
+      color: var(--text-secondary);
+      margin-top: 4px;
+      line-height: 1.4;
+    }
+
+    .form-actions {
+      padding: 24px 32px 32px 32px;
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      background: var(--bg-secondary);
+    }
+
+    .btn {
+      padding: 12px 24px;
+      border: none;
+      border-radius: var(--border-radius);
+      font-weight: 500;
+      font-family: inherit;
+      font-size: 14px;
+      cursor: pointer;
+      transition: var(--transition);
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      text-decoration: none;
+      min-width: 140px;
+      justify-content: center;
+    }
+
+    .btn-primary {
+      background: var(--google-blue);
+      color: white;
+      border: 2px solid var(--google-blue);
+    }
+
+    .btn-primary:hover {
+      background: var(--google-blue-hover);
+      border-color: var(--google-blue-hover);
+      transform: translateY(-1px);
+      box-shadow: var(--shadow-2);
+    }
+
+    .btn-primary:disabled {
+      background: var(--google-gray-400);
+      border-color: var(--google-gray-400);
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+
+    .btn-secondary {
+      background: transparent;
+      color: var(--text-color);
+      border: 2px solid var(--border-color);
+    }
+
+    .btn-secondary:hover {
+      background: var(--hover-color);
+      transform: translateY(-1px);
+      box-shadow: var(--shadow-1);
+    }
+
+    .btn-icon {
+      font-size: 16px;
+    }
+
+    .btn-text {
+      font-weight: 500;
+    }
+
+    /* Loading state for submit button */
+    .btn-loading {
+      position: relative;
+      color: transparent !important;
+    }
+
+    .btn-loading::after {
+      content: '';
+      position: absolute;
+      width: 16px;
+      height: 16px;
+      top: 50%;
+      left: 50%;
+      margin-left: -8px;
+      margin-top: -8px;
+      border: 2px solid transparent;
+      border-top-color: currentColor;
+      border-radius: 50%;
+      animation: button-loading-spinner 1s ease infinite;
+    }
+
+    @keyframes button-loading-spinner {
+      from {
+        transform: rotate(0turn);
+      }
+
+      to {
+        transform: rotate(1turn);
+      }
+    }
+
+    /* Input validation styles */
+    .form-input.error {
+      border-color: #ea4335 !important;
+      box-shadow: 0 0 0 3px rgba(234, 67, 53, 0.1) !important;
+    }
+
+    .form-input.success {
+      border-color: #34a853 !important;
+    }
+
+    .error-message {
+      color: #ea4335;
+      font-size: 12px;
+      margin-top: 4px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .success-message {
+      color: #34a853;
+      font-size: 12px;
+      margin-top: 4px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    /* Dark theme adjustments */
+    [data-theme="dark"] .btn-primary {
+      background: #8ab4f8;
+      border-color: #8ab4f8;
+      color: var(--google-gray-900);
+    }
+
+    [data-theme="dark"] .btn-primary:hover {
+      background: #aecbfa;
+      border-color: #aecbfa;
+    }
+
+    [data-theme="dark"] .form-input:focus {
+      border-color: #8ab4f8;
+      box-shadow: 0 0 0 3px rgba(138, 180, 248, 0.1);
+    }
+
+    /* Responsive design */
+    @media (max-width: 768px) {
+      .form-container {
+        margin: 16px;
+        border-radius: var(--border-radius);
+        max-height: calc(100vh - 32px);
+      }
+
+      .form-header,
+      .form-section,
+      .form-actions {
+        padding-left: 20px;
+        padding-right: 20px;
+      }
+
+      .form-header {
+        padding-top: 24px;
+        padding-bottom: 20px;
+      }
+
+      .form-title {
+        font-size: 24px;
+      }
+
+      .form-subtitle {
+        font-size: 14px;
+      }
+
+      .form-row {
+        grid-template-columns: 1fr;
+        gap: 12px;
+      }
+
+      .form-actions {
+        flex-direction: column-reverse;
+        gap: 8px;
+      }
+
+      .btn {
+        width: 100%;
+        min-width: auto;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .form-container {
+        margin: 8px;
+        max-height: calc(100vh - 16px);
+      }
+
+      .form-header,
+      .form-section,
+      .form-actions {
+        padding-left: 16px;
+        padding-right: 16px;
+      }
+
+      .form-title {
+        font-size: 20px;
+      }
+
+      .section-title {
+        font-size: 16px;
+      }
+
+      .form-input {
+        padding: 10px 12px;
+        font-size: 16px;
+        /* Prevent zoom on iOS */
+      }
+    }
+
+    /* Custom scrollbar for form */
+    .form-container::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .form-container::-webkit-scrollbar-track {
+      background: var(--bg-secondary);
+      border-radius: 3px;
+    }
+
+    .form-container::-webkit-scrollbar-thumb {
+      background: var(--text-secondary);
+      border-radius: 3px;
+    }
+
+    .form-container::-webkit-scrollbar-thumb:hover {
+      background: var(--text-color);
+    }
+
+    /* Smooth scrolling behavior */
+    .form-container {
+      scroll-behavior: smooth;
+    }
+
+    /* Add padding to bottom for better scroll experience */
+    .form-actions {
+      padding-bottom: 40px;
+    }
+  </style>
+
+  <script>
+    // Form initialization and validation
+  document.addEventListener('DOMContentLoaded', () => {
+    ensureAuthForForm(); // ใช้ function ใหม่ที่แก้ไขแล้ว
+  });
+
+
+  function initializeForm() {
+    const form = document.getElementById('booking-form');
+    if (!form) return;
+
+    // Set minimum date to today
+    const dateInput = document.getElementById('date');
+    if (dateInput) {
+      const today = new Date().toISOString().split('T')[0];
+      dateInput.setAttribute('min', today);
+      dateInput.value = today;
+    }
+
+    // Set default time if empty
+    const startInput = document.getElementById('start');
+    const endInput = document.getElementById('end');
+    
+    if (startInput && !startInput.value) {
+      startInput.value = '09:00';
+    }
+    
+    if (endInput && !endInput.value) {
+      endInput.value = '10:00';
+    }
+
+    // Add real-time validation
+    addRealTimeValidation();
+  }
+
+  function addRealTimeValidation() {
+    const inputs = document.querySelectorAll('.form-input');
+    
+    inputs.forEach(input => {
+      input.addEventListener('blur', function() {
+        validateField(this);
+      });
+
+      input.addEventListener('input', function() {
+        clearFieldError(this);
+      });
+    });
+
+    // Special validation for time inputs
+    const startInput = document.getElementById('start');
+    const endInput = document.getElementById('end');
+    
+    if (startInput && endInput) {
+      [startInput, endInput].forEach(input => {
+        input.addEventListener('change', function() {
+          validateTimeRange();
+        });
+      });
+    }
+  }
+
+  function validateField(field) {
+    const value = field.value.trim();
+    const fieldName = field.getAttribute('name');
+    let isValid = true;
+    let errorMessage = '';
+
+    // Clear previous errors
+    clearFieldError(field);
+
+    // Required field validation
+    if (field.hasAttribute('required') && !value) {
+      isValid = false;
+      errorMessage = 'กรุณากรอกข้อมูลในช่องนี้';
+    }
+
+    // Email validation
+    if (fieldName === 'email' && value && !isValidEmail(value)) {
+      isValid = false;
+      errorMessage = 'รูปแบบอีเมลไม่ถูกต้อง';
+    }
+
+    // Date validation
+    if (fieldName === 'date' && value) {
+      const selectedDate = new Date(value);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      if (selectedDate < today) {
+        isValid = false;
+        errorMessage = 'ไม่สามารถเลือกวันที่ในอดีตได้';
+      }
+    }
+
+    // Show validation result
+    if (isValid) {
+      showFieldSuccess(field);
+    } else {
+      showFieldError(field, errorMessage);
+    }
+
+    return isValid;
+  }
+
+  function validateTimeRange() {
+    const startInput = document.getElementById('start');
+    const endInput = document.getElementById('end');
+    
+    if (!startInput || !endInput || !startInput.value || !endInput.value) {
+      return true;
+    }
+
+    const startTime = startInput.value;
+    const endTime = endInput.value;
+
+    clearFieldError(startInput);
+    clearFieldError(endInput);
+
+    if (startTime >= endTime) {
+      showFieldError(endInput, 'เวลาสิ้นสุดต้องมาหลังเวลาเริ่ม');
+      return false;
+    }
+
+    // Check minimum duration (15 minutes)
+    const start = new Date(`1970-01-01T${startTime}:00`);
+    const end = new Date(`1970-01-01T${endTime}:00`);
+    const diffMinutes = (end - start) / (1000 * 60);
+
+    if (diffMinutes < 15) {
+      showFieldError(endInput, 'การจองต้องมีระยะเวลาอย่างน้อย 15 นาที');
+      return false;
+    }
+
+    showFieldSuccess(startInput);
+    showFieldSuccess(endInput);
+    return true;
+  }
+
+  function showFieldError(field, message) {
+    field.classList.add('error');
+    field.classList.remove('success');
+    
+    // Remove existing error message
+    const existingError = field.parentNode.querySelector('.error-message');
+    if (existingError) {
+      existingError.remove();
+    }
+
+    // Add new error message
+    const errorDiv = document.createElement('div');
+    errorDiv.className = 'error-message';
+    errorDiv.innerHTML = `⚠️ ${message}`;
+    field.parentNode.appendChild(errorDiv);
+  }
+
+  function showFieldSuccess(field) {
+    field.classList.add('success');
+    field.classList.remove('error');
+    
+    // Remove error message if exists
+    const existingError = field.parentNode.querySelector('.error-message');
+    if (existingError) {
+      existingError.remove();
+    }
+  }
+
+  function clearFieldError(field) {
+    field.classList.remove('error', 'success');
+    
+    const existingError = field.parentNode.querySelector('.error-message');
+    if (existingError) {
+      existingError.remove();
+    }
+  }
+
+  function isValidEmail(email) {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+  }
+
+  // Enhanced form submission with better UX
+  function handleSubmit(event) {
+    event.preventDefault();
+    
+    const form = event.target;
+    const submitBtn = document.getElementById('submit-btn');
+    
+    // Validate all fields
+    const inputs = form.querySelectorAll('.form-input[required]');
+    let isFormValid = true;
+    
+    inputs.forEach(input => {
+      if (!validateField(input)) {
+        isFormValid = false;
+      }
+    });
+
+    // Validate time range
+    if (!validateTimeRange()) {
+      isFormValid = false;
+    }
+
+    if (!isFormValid) {
+      // Scroll to first error
+      const firstError = form.querySelector('.form-input.error');
+      if (firstError) {
+        firstError.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        firstError.focus();
+      }
+      return false;
+    }
+
+    // Show loading state
+    submitBtn.disabled = true;
+    submitBtn.classList.add('btn-loading');
+    
+    // Use the global handleSubmit function
+    if (typeof window.handleSubmit === 'function') {
+      return window.handleSubmit(event);
+    }
+    
+    return false;
+  }
+
+  // Reset form to initial state
+  function resetForm() {
+    const form = document.getElementById('booking-form');
+    if (form) {
+      form.reset();
+      
+      // Clear all validation states
+      const inputs = form.querySelectorAll('.form-input');
+      inputs.forEach(clearFieldError);
+      
+      // Reset submit button
+      const submitBtn = document.getElementById('submit-btn');
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.classList.remove('btn-loading');
+      }
+      
+      // Reinitialize form
+      setTimeout(initializeForm, 100);
+    }
+  }
+
+  // Export functions for global access
+  window.resetForm = resetForm;
+
+  function ensureAuthForForm() {
+  const user = window.currentUser || currentUser;
+  const checked = window.isAuthChecked || isAuthChecked || window.authChecked || authChecked;
+  
+  if (checked && user && user.email) {
+    initializeForm();
+  } else if (checked && !user) {
+    // แสดงหน้าต้องล็อกอิน
+    loadView('login');
+  } else {
+    // รอ auth check เสร็จ
+    setTimeout(ensureAuthForForm, 500);
+  }
+}
+  </script>
