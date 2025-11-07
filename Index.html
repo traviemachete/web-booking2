@@ -1,0 +1,670 @@
+<!-- Index.html -->
+
+<!DOCTYPE html>
+<html lang="th">
+
+<head>
+  <base target="_top">
+  <meta charset="UTF-8">
+  <title>ระบบจองห้องประชุม</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- Google Fonts & Icons -->
+  <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+  <!-- Custom Stylesheet -->
+  <?!= include('Stylesheet') ?>
+
+  <!-- FullCalendar -->
+  <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.css" rel="stylesheet">
+
+  <!-- SweetAlert2 -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
+</head>
+
+<body>
+  <!-- Sidebar Navigation -->
+  <nav class="sidebar <?= view === 'calendarlist' ? 'hide-sidebar' : '' ?>">
+    <h5>🏢 ระบบจองห้องประชุม</h5>
+
+    <!-- User Info Section -->
+    <div class="user-info" id="userInfo">
+      <div class="user-loading">
+        <p>กำลังโหลด...</p>
+      </div>
+    </div>
+
+    <!-- Navigation Menu -->
+    <ul class="nav-menu">
+      <li>
+        <a href="#" onclick="loadView('calendar'); return false;" id="nav-calendar" class="active">
+          📅 ปฏิทินการจอง
+        </a>
+      </li>
+      <li>
+        <a href="#" onclick="checkAuthAndNavigate('form'); return false;" id="nav-form">
+          📝 จองห้องประชุม
+        </a>
+      </li>
+    </ul>
+  </nav>
+
+  <!-- Main Content Area -->
+  <main class="main <?= view === 'calendarlist' ? 'fullpage' : '' ?>">
+    <div id="mainContent">
+      <!-- Dynamic content will be loaded here -->
+      <div class="loading-placeholder">
+        <div class="loading-content">
+          <div class="loading-spinner"></div>
+          <h3>🔄 กำลังโหลด...</h3>
+          <p>กรุณารอสักครู่</p>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- External Scripts -->
+  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+  <!-- Custom JavaScript -->
+  <?!= include('JavaScript') ?>
+
+  <script>
+    // Global variables
+    let currUser = null;
+    let authChecked = false;
+
+    // Initialize app when page loads
+    document.addEventListener('DOMContentLoaded', function() {
+      console.log('🚀 Initializing booking system...');
+      
+      // Initialize theme first
+      initializeTheme();
+      
+      // ✅ Restore session if exists
+      const savedSession = sessionStorage.getItem('booking_session');
+      if (savedSession) {
+        const session = JSON.parse(savedSession);
+        if (session.expires > Date.now()) {
+          window.currentUser = session.user;
+          window.authChecked = true;
+          renderUserBox(session.user);
+          console.log('🔐 Session restored from sessionStorage');
+        } else {
+          sessionStorage.removeItem('booking_session');
+          console.log('🗑️ Session expired and cleared');
+        }
+      }
+
+      // Check authentication and render user box
+      checkAuthAndRenderUserBox();
+      
+      // Load default view after auth check
+      setTimeout(() => {
+        loadView('calendar');
+      }, 800);
+    });
+
+    // Theme management
+    function initializeTheme() {
+      const savedTheme = localStorage.getItem("booking-theme") || "light";
+      document.documentElement.setAttribute("data-theme", savedTheme);
+      console.log('🎨 Theme initialized:', savedTheme);
+    }
+
+    function toggleTheme() {
+      const headerToggle = document.getElementById("themeToggleHeader");
+      
+      let newTheme;
+      if (headerToggle && headerToggle.checked !== undefined) {
+        newTheme = headerToggle.checked ? "dark" : "light";
+      } else {
+        const currentTheme = document.documentElement.getAttribute("data-theme") || "light";
+        newTheme = currentTheme === "dark" ? "light" : "dark";
+      }
+      
+      document.documentElement.setAttribute("data-theme", newTheme);
+      localStorage.setItem("booking-theme", newTheme);
+      
+      // Sync toggle
+      if (headerToggle) headerToggle.checked = newTheme === "dark";
+      
+      console.log('🎨 Theme changed to:', newTheme);
+    }
+
+    // Authentication check and user box rendering
+    function checkAuthAndRenderUserBox() {
+      if (typeof google !== 'undefined' && google.script && google.script.run) {
+        google.script.run
+          .withSuccessHandler(function(user) {
+            currentUser = user;
+            authChecked = true;
+            renderUserBox(user);
+            console.log('👤 User status:', user ? `Logged in as ${user.name}` : 'Not logged in');
+          })
+          .withFailureHandler(function(error) {
+            console.error('❌ Auth check failed:', error);
+            currentUser = null;
+            authChecked = true;
+            renderUserBox(null);
+          })
+          .getSessionUser();
+      } else {
+        // Fallback for testing
+        currentUser = null;
+        authChecked = true;
+        renderUserBox(null);
+        console.log('⚠️ Google Apps Script not available');
+      }
+    }
+
+    // Render user info box
+    function renderUserBox(user) {
+      const userInfoEl = document.getElementById("userInfo");
+      if (!userInfoEl) return;
+
+      if (user) {
+        userInfoEl.innerHTML = `
+          <div class="user-profile">
+            <div class="user-avatar">
+              <span class="avatar-icon">👤</span>
+            </div>
+            <div class="user-details">
+              <p class="user-name">${user.name}</p>
+              <p class="user-email">${user.email}</p>
+            </div>
+          </div>
+          <button class="logout-btn" onclick="logout()">
+            <span>🚪</span> ออกจากระบบ
+          </button>
+        `;
+      } else {
+        userInfoEl.innerHTML = `
+          <div class="auth-prompt">
+            <p class="auth-text">ยังไม่ได้เข้าสู่ระบบ</p>
+            <button class="login-btn" onclick="loadView('login')">
+              <span>🔑</span> เข้าสู่ระบบ
+            </button>
+          </div>
+        `;
+      }
+    }
+
+    // Logout function
+    function logout() {
+      if (typeof google !== 'undefined' && google.script && google.script.run) {
+        google.script.run
+          .withSuccessHandler(function() {
+            currentUser = null;
+            renderUserBox(null);
+            
+            if (typeof Swal !== 'undefined') {
+              Swal.fire({
+                icon: 'success',
+                title: 'ออกจากระบบแล้ว',
+                text: 'ขอบคุณที่ใช้บริการ',
+                timer: 1500,
+                showConfirmButton: false
+              });
+            }
+            
+            // Redirect to calendar
+            setTimeout(() => {
+              loadView('calendar');
+            }, 1000);
+          })
+          .withFailureHandler(function(error) {
+            console.error('Logout failed:', error);
+            if (typeof Swal !== 'undefined') {
+              Swal.fire({
+                icon: 'error',
+                title: 'เกิดข้อผิดพลาด',
+                text: 'ไม่สามารถออกจากระบบได้'
+              });
+            }
+          })
+          .logoutUser();
+      } else {
+        // Fallback for testing
+        currentUser = null;
+        renderUserBox(null);
+        loadView('calendar');
+      }
+    }
+
+    // Check auth before navigation
+    function checkAuthAndNavigate(viewName) {
+      if (!authChecked) {
+        // Wait for auth check
+        setTimeout(() => checkAuthAndNavigate(viewName), 200);
+        return;
+      }
+
+      if (currentUser) {
+        // User is logged in, proceed to view
+        loadView(viewName);
+      } else {
+        // User not logged in, show login prompt
+        if (typeof Swal !== 'undefined') {
+          Swal.fire({
+            icon: 'info',
+            title: 'จำเป็นต้องเข้าสู่ระบบ',
+            text: 'กรุณาเข้าสู่ระบบเพื่อทำการจองห้องประชุม',
+            showCancelButton: true,
+            confirmButtonText: 'เข้าสู่ระบบ',
+            cancelButtonText: 'ยกเลิก',
+            confirmButtonColor: '#1a73e8',
+            cancelButtonColor: '#6c757d'
+          }).then((result) => {
+            if (result.isConfirmed) {
+              loadView('login');
+            }
+          });
+        } else {
+          // Fallback without SweetAlert
+          if (confirm('กรุณาเข้าสู่ระบบเพื่อทำการจองห้องประชุม')) {
+            loadView('login');
+          }
+        }
+      }
+    }
+
+    // Navigation helpers
+    function setActiveNav(viewName) {
+      // Remove active class from all nav items
+      document.querySelectorAll('.nav-menu a').forEach(link => {
+        link.classList.remove('active');
+      });
+      
+      // Add active class to current nav item
+      const activeNav = document.getElementById(`nav-${viewName}`);
+      if (activeNav) {
+        activeNav.classList.add('active');
+      }
+      
+      console.log('📍 Navigation set to:', viewName);
+    }
+
+    // Load view function
+    function loadView(viewName, forceRefresh = false) {
+      console.log('📄 Loading view:', viewName);
+
+      // ✅ บอกให้ทุกที่รู้ว่า view ปัจจุบันคืออะไร
+      window.currentView = viewName;
+      
+      const mainContent = document.getElementById('mainContent');
+      if (!mainContent) {
+        console.error('❌ Main content element not found');
+        return;
+      }
+
+      // Update navigation
+      setActiveNav(viewName);
+      
+      // Show loading state
+      if (!forceRefresh) {
+        mainContent.innerHTML = `
+          <div class="loading-placeholder">
+            <div class="loading-content">
+              <div class="loading-spinner"></div>
+              <h3>🔄 กำลังโหลด...</h3>
+              <p>กรุณารอสักครู่</p>
+            </div>
+          </div>
+        `;
+      }
+
+      // View mapping
+      const viewMap = {
+        calendar: 'CalendarView',
+        form: 'Form',
+        list: 'TodayList',
+        login: 'Login',
+        register: 'Register',
+        forgot: 'ForgotPassword',
+        calendarlist: 'CalendarList'   // ✅ เพิ่มตัวนี้ด้วยถ้ายังไม่ได้ใส่
+      };
+
+      const templateName = viewMap[viewName] || 'CalendarView';
+      
+      if (typeof google !== 'undefined' && google.script && google.script.run && google.script.run.include) {
+        google.script.run
+          .withSuccessHandler(function(html) {
+            mainContent.innerHTML = html;
+            handleViewLoaded(viewName);
+            console.log('✅ View loaded successfully:', viewName);
+          })
+          .withFailureHandler(function(error) {
+            console.error('❌ Failed to load view from server:', error);
+            mainContent.innerHTML = `
+              <div class="error-container">
+                <div class="error-content">
+                  <h3>⚠️ เกิดข้อผิดพลาด</h3>
+                  <p>ไม่สามารถโหลดข้อมูลได้ กรุณาลองใหม่อีกครั้ง</p>
+                  <button onclick="loadView('${viewName}')" class="retry-btn">
+                    🔄 ลองใหม่
+                  </button>
+                </div>
+              </div>
+            `;
+          })
+          .include(templateName);
+      } else {
+        console.error('❌ Google Apps Script not available');
+        mainContent.innerHTML = getFallbackContent(viewName);
+        handleViewLoaded(viewName);
+      }
+}
+
+
+    // Handle post-load actions
+    function handleViewLoaded(viewName) {
+      if (viewName === 'calendar') {
+        setTimeout(() => {
+          // Load events from Google Apps Script
+          if (typeof google !== 'undefined' && google.script && google.script.run) {
+            google.script.run
+              .withSuccessHandler(function(events) {
+                if (typeof renderCalendar === 'function') {
+                  renderCalendar(events);
+                } else {
+                  console.error('❌ renderCalendar function not found');
+                }
+              })
+              .withFailureHandler(function(error) {
+                console.error('❌ Failed to load events:', error);
+                const calendarEl = document.getElementById('calendar');
+                if (calendarEl) {
+                  calendarEl.innerHTML = `
+                    <div class="calendar-error">
+                      <h3>⚠️ ไม่สามารถโหลดข้อมูลได้</h3>
+                      <p>กรุณาตรวจสอบการเชื่อมต่อ Google Apps Script</p>
+                      <button onclick="loadView('calendar', true)" class="retry-btn">
+                        🔄 ลองใหม่
+                      </button>
+                    </div>
+                  `;
+                }
+              })
+              .listEvents();
+          } else {
+            console.error('❌ Google Apps Script not available for loading events');
+            // Use fallback sample data
+            if (typeof renderCalendar === 'function') {
+              renderCalendar(getSampleEvents());
+            }
+          }
+        }, 200);
+
+        if (viewName === 'forgot') {
+          if (typeof initForgotPassword === 'function') {
+            initForgotPassword();
+            console.log('✅ initForgotPassword() called');
+          } else {
+            console.warn('⚠️ initForgotPassword() not found');
+          }
+        }
+
+      }
+      
+      // Handle form view
+      if (viewName === 'form') {
+        setTimeout(() => {
+          setupFormDefaults();
+        }, 100);
+      }
+    
+      // Sync theme toggle in header if exists
+      const headerToggle = document.getElementById('themeToggleHeader');
+      if (headerToggle) {
+        const savedTheme = localStorage.getItem("booking-theme") || "light";
+        headerToggle.checked = savedTheme === "dark";
+      }
+    }
+
+    // Setup form defaults
+    function setupFormDefaults() {
+      // Set default date to today or selected date
+      const today = new Date().toISOString().split('T')[0];
+      const selectedDate = localStorage.getItem('selectedDate') || today;
+      
+      const dateInput = document.getElementById('date');
+      if (dateInput) {
+        dateInput.value = selectedDate;
+        dateInput.setAttribute('min', today); // Prevent past dates
+      }
+      
+      // Clear selected date from localStorage
+      localStorage.removeItem('selectedDate');
+
+      // Set default time range (9:00 AM - 10:00 AM)
+      const startInput = document.getElementById('start');
+      const endInput = document.getElementById('end');
+      if (startInput && !startInput.value) {
+        startInput.value = '09:00';
+      }
+      if (endInput && !endInput.value) {
+        endInput.value = '10:00';
+      }
+    }
+
+    // Get sample events for fallback
+    function getSampleEvents() {
+      const today = new Date();
+      return [
+        {
+          id: 'sample-1',
+          title: 'ประชุมทีม IT',
+          start: new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1, 9, 0),
+          end: new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1, 11, 0),
+          backgroundColor: '#1a73e8',
+          extendedProps: {
+            booker: 'สมชาย ใจดี',
+            department: 'ฝ่ายไอที',
+            company: 'บริษัท ABC',
+            purpose: 'ประชุมประจำสัปดาห์',
+            email: 'somchai@abc.com'
+          }
+        },
+        {
+          id: 'sample-2',
+          title: 'อบรมพนักงานใหม่',
+          start: new Date(today.getFullYear(), today.getMonth(), today.getDate() + 2, 13, 0),
+          end: new Date(today.getFullYear(), today.getMonth(), today.getDate() + 2, 16, 0),
+          backgroundColor: '#34a853',
+          extendedProps: {
+            booker: 'สุดา นักอบรม',
+            department: 'ฝ่าย HR',
+            company: 'บริษัท ABC',
+            purpose: 'อบรมพนักงานใหม่',
+            email: 'suda@abc.com'
+          }
+        }
+      ];
+    }
+
+    // Get fallback content for testing
+    function getFallbackContent(viewName) {
+      const fallbackContents = {
+        calendar: `
+          <div class="calendar-container">
+            <div class="calendar-header">
+              <h4>📅 ปฏิทินการใช้ห้องประชุม</h4>
+              <div class="calendar-actions">
+                <button class="refresh-btn" onclick="refreshCalendarData()">🔄 รีเฟรช</button>
+                <button class="add-btn" onclick="checkAuthAndNavigate('form')">➕ จองใหม่</button>
+              </div>
+            </div>
+            <div id="calendar"></div>
+            <div class="calendar-footer">
+              <div class="calendar-legend">
+                <div class="legend-item">
+                  <span class="legend-color" style="background: #1a73e8;"></span>
+                  <span>การจองปกติ</span>
+                </div>
+                <div class="legend-item">
+                  <span class="legend-color" style="background: #ea4335;"></span>
+                  <span>ยกเลิกแล้ว</span>
+                </div>
+                <div class="legend-item">
+                  <span class="legend-color" style="background: #34a853;"></span>
+                  <span>เสร็จสิ้นแล้ว</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        `,
+        form: `
+          <div class="form-container">
+            <div class="form-header">
+              <h3 class="form-title">📝 แบบฟอร์มจองห้องประชุม</h3>
+              <p class="form-subtitle">กรุณาเชื่อมต่อกับ Google Apps Script เพื่อใช้งานฟอร์ม</p>
+            </div>
+            <div class="form-actions">
+              <button class="btn btn-secondary" onclick="loadView('calendar')">
+                ย้อนกลับ
+              </button>
+            </div>
+          </div>
+        `,
+        list: `
+          <div class="text-center" style="padding: 40px; color: var(--text-secondary);">
+            <h3>📋 รายการจองทั้งหมด</h3>
+            <p>กรุณาเชื่อมต่อกับ Google Apps Script เพื่อดูรายการจอง</p>
+          </div>
+        `,
+        login: `
+          <div class="auth-container">
+            <div class="auth-card">
+              <div class="auth-header">
+                <div class="auth-logo">
+                  <span class="logo-icon">🏢</span>
+                  <h2 class="logo-text">ระบบจองห้องประชุม</h2>
+                </div>
+                <h3 class="auth-title">เข้าสู่ระบบ</h3>
+                <p class="auth-subtitle">กรุณาเชื่อมต่อกับ Google Apps Script เพื่อใช้งานระบบ</p>
+              </div>
+            </div>
+          </div>
+        `,
+        register: `
+          <div class="auth-container">
+            <div class="auth-card">
+              <div class="auth-header">
+                <div class="auth-logo">
+                  <span class="logo-icon">🏢</span>
+                  <h2 class="logo-text">ระบบจองห้องประชุม</h2>
+                </div>
+                <h3 class="auth-title">สมัครสมาชิก</h3>
+                <p class="auth-subtitle">กรุณาเชื่อมต่อกับ Google Apps Script เพื่อใช้งานระบบ</p>
+              </div>
+            </div>
+          </div>
+        `
+      };
+      
+      return fallbackContents[viewName] || fallbackContents.calendar;
+    }
+
+    // Refresh calendar - load from server
+    function refreshCalendar() {
+      console.log('🔄 Refreshing calendar from server...');
+      
+      if (typeof google !== 'undefined' && google.script && google.script.run) {
+        const refreshBtn = document.querySelector('.refresh-btn');
+        if (refreshBtn) {
+          const originalText = refreshBtn.innerHTML;
+          refreshBtn.innerHTML = '⏳ กำลังโหลด...';
+          refreshBtn.disabled = true;
+          
+          google.script.run
+            .withSuccessHandler(function(events) {
+              if (typeof renderCalendar === 'function') {
+                renderCalendar(events);
+              }
+              
+              // Reset button
+              refreshBtn.innerHTML = originalText;
+              refreshBtn.disabled = false;
+              
+              if (typeof Swal !== 'undefined') {
+                Swal.fire({
+                  icon: 'success',
+                  title: 'รีเฟรชสำเร็จ',
+                  text: 'ข้อมูลปฏิทินได้รับการอัปเดตแล้ว',
+                  timer: 1500,
+                  showConfirmButton: false
+                });
+              }
+              
+              console.log('✅ Calendar refreshed successfully');
+            })
+            .withFailureHandler(function(error) {
+              console.error('❌ Failed to refresh calendar:', error);
+              
+              // Reset button
+              refreshBtn.innerHTML = originalText;
+              refreshBtn.disabled = false;
+              
+              if (typeof Swal !== 'undefined') {
+                Swal.fire({
+                  icon: 'error',
+                  title: 'เกิดข้อผิดพลาด',
+                  text: 'ไม่สามารถรีเฟรชข้อมูลได้ กรุณาลองใหม่อีกครั้ง'
+                });
+              }
+            })
+            .listEvents();
+        }
+      } else {
+        console.error('❌ Google Apps Script not available');
+        if (typeof Swal !== 'undefined') {
+          Swal.fire({
+            icon: 'info',
+            title: 'โหมดทดสอบ',
+            text: 'เชื่อมต่อกับ Google Apps Script เพื่อรีเฟรชข้อมูล'
+          });
+        }
+      }
+    }
+
+    // Alias for refresh function
+    function refreshCalendarData() {
+      refreshCalendar();
+    }
+
+    // Global error handler
+    window.addEventListener('error', function(e) {
+      console.error('💥 Global error:', e.error);
+    });
+
+    // Export functions for global access
+    window.loadView = loadView;
+    window.toggleTheme = toggleTheme;
+    window.checkAuthAndNavigate = checkAuthAndNavigate;
+    window.renderUserBox = renderUserBox;
+    window.refreshCalendar = refreshCalendar;
+    window.refreshCalendarData = refreshCalendarData;
+    window.logout = logout;
+    window.currentUser = currentUser;
+    window.authChecked = authChecked;
+
+    console.log('📝 Booking system script loaded');
+
+  </script>
+  <script>
+  document.addEventListener('DOMContentLoaded', function () {
+    if (typeof restoreSession === 'function') restoreSession();
+  });
+  </script>
+  <script>
+    window.addEventListener("DOMContentLoaded", () => {
+      const view = "<?= view ?>";
+      loadView(view);
+    });
+  </script>
+
+</body>
+
+</html>
