@@ -1,0 +1,188 @@
+<!-- Sidebar.html -->
+<div class="layout">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="user-info" id="userInfo">
+      <p class="not-logged"><strong>กำลังโหลด...</strong></p>
+    </div>
+
+    <ul class="menu">
+      <li>
+        <a href="#" onclick="loadView('calendar'); return false;" class="active" id="nav-calendar">
+          📅 ปฏิทินการจอง
+        </a>
+      </li>
+      <li>
+        <a href="#" onclick="safeNavigateToForm()"; return false;" id="nav-form">
+          📝 จองห้องประชุม
+        </a>
+      </li>
+      <li>
+        <a href="?view=calendarlist">
+          📄 รายการจอง
+        </a>
+      </li>
+
+    </ul>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="main-content" id="mainContent">
+    <!-- เนื้อหาจะโหลดมาแสดงที่นี่ -->
+  </main>
+</div>
+
+<style>
+  :root {
+    --bg-color: #202124;
+    --text-color: #e8eaed;
+    --primary-color: #8ab4f8;
+    --hover-color: #3c4043;
+    --sidebar-bg: #202124;
+    --sidebar-hover: #3c4043;
+    --btn-login-bg: #8ab4f8;
+    --btn-login-text: #202124;
+    --radius: 8px;
+  }
+
+  .layout {
+    display: flex;
+    min-height: 100vh;
+    font-family: 'Kanit', sans-serif;
+  }
+
+  .sidebar {
+    width: 250px;
+    background-color: var(--sidebar-bg);
+    color: var(--text-color);
+    padding: 1rem;
+    border-right: 1px solid #3c4043;
+  }
+
+  .user-info {
+    margin-bottom: 2rem;
+    text-align: center;
+  }
+
+  .user-info p {
+    margin-bottom: 10px;
+    color: var(--text-color);
+  }
+
+  .btn-login {
+    padding: 6px 16px;
+    background-color: var(--btn-login-bg);
+    color: var(--btn-login-text);
+    border: none;
+    border-radius: var(--radius);
+    font-size: 14px;
+    cursor: pointer;
+    transition: background-color 0.3s;
+  }
+
+  .btn-login:hover {
+    background-color: #a4c6fa;
+  }
+
+  .menu {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+
+  .menu li {
+    margin-bottom: 10px;
+  }
+
+  .menu a {
+    color: var(--text-color);
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+    padding: 10px 14px;
+    border-radius: var(--radius);
+    transition: background-color 0.2s;
+    font-weight: 500;
+  }
+
+  .menu a:hover {
+    background-color: var(--hover-color);
+  }
+
+  .main-content {
+    flex-grow: 1;
+    padding: 20px;
+    background-color: var(--bg-color);
+  }
+
+  @media screen and (max-width: 768px) {
+    .layout {
+      flex-direction: column;
+    }
+
+    .sidebar {
+      width: 100%;
+      height: auto;
+      display: flex;
+      flex-direction: row;
+      justify-content: space-around;
+      align-items: center;
+      padding: 10px 20px;
+    }
+
+    .menu {
+      display: flex;
+      gap: 10px;
+    }
+
+    .main-content {
+      padding-top: 100px;
+    }
+  }
+</style>
+
+<script>
+  function renderUserBox() {
+    google.script.run.withSuccessHandler(user => {
+      console.log("👤 Current User:", user);
+
+      // ✅ สำคัญ: อัปเดตตัวแปร global เพื่อให้ checkAuthAndNavigate ใช้ได้
+      window.currentUser = user || null;
+      window.authChecked = true;
+
+      const el = document.getElementById("userInfo");
+
+      if (user) {
+        el.innerHTML = `
+          <p>👤 <strong>${user.name}</strong></p>
+          <button class="btn-login" onclick="logout()">🚪 ออกจากระบบ</button>
+        `;
+      } else {
+        el.innerHTML = `
+          <p class="not-logged"><strong>ยังไม่ได้เข้าสู่ระบบ</strong></p>
+          <button class="btn-login" onclick="loadView('login')">เข้าสู่ระบบ</button>
+        `;
+      }
+    }).getSessionUser();
+  }
+
+  function logout() {
+    google.script.run.withSuccessHandler(() => {
+      renderUserBox();
+      loadView('calendar');
+    }).logoutUser();
+  }
+
+  function ensureAuth(callback) {
+    google.script.run.withSuccessHandler(user => {
+      if (user) {
+        callback();
+      } else {
+        M.toast({ html: "กรุณาเข้าสู่ระบบก่อนจองห้องประชุม" });
+        loadView('login');
+      }
+    }).getSessionUser();
+  }
+
+  window.addEventListener("DOMContentLoaded", renderUserBox);
+</script>
