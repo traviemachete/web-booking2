@@ -1,0 +1,366 @@
+<!-- CalendarView.html -->
+<div class="calendar-container">
+  <div class="calendar-header">
+    <h4>📅 ปฏิทินการใช้ห้องประชุม</h4>
+    <div class="calendar-actions">
+      <button class="fc-button refresh-btn" onclick="refreshCalendar()" title="รีเฟรชข้อมูล">
+        🔄 รีเฟรช
+      </button>
+      <button class="fc-button add-btn" onclick="checkAuthAndNavigate('form')" title="เพิ่มการจองใหม่">
+         ➕ จองใหม่
+      </button>
+
+      <!-- Theme Toggle ย้ายมาไว้ใน header -->
+      <div class="theme-switch-wrapper-header">
+        <label class="theme-switch">
+          <input type="checkbox" id="themeToggleHeader" onchange="toggleTheme()" />
+          <span class="slider">
+            <svg class="icon moon" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M21 12.79A9 9 0 0 1 11.21 3c-.16 0-.31.01-.47.02A9 9 0 1 0 21 12.79Z"/>
+            </svg>
+            <svg class="icon sun" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 18a6 6 0 1 0 0-12 6 6 0 0 0 0 12Zm0 2a8 8 0 1 1 0-16 8 8 0 0 1 0 16Z"/>
+            </svg>
+          </span>
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <!-- Calendar Display Area -->
+  <div id="calendar"></div>
+
+  <!-- Calendar Footer with Quick Info -->
+  <div class="calendar-footer">
+    <div class="calendar-legend">
+      <div class="legend-item">
+        <span class="legend-color" style="background: var(--google-blue);"></span>
+        <span>การจองปกติ</span>
+      </div>
+      <div class="legend-item">
+        <span class="legend-color" style="background: #ea4335;"></span>
+        <span>ยกเลิกแล้ว</span>
+      </div>
+      <div class="legend-item">
+        <span class="legend-color" style="background: #34a853;"></span>
+        <span>เสร็จสิ้นแล้ว</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  .calendar-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .refresh-btn,
+  .add-btn {
+    font-size: 14px !important;
+    padding: 8px 12px !important;
+    border-radius: 6px !important;
+    font-weight: 500 !important;
+    cursor: pointer !important;
+    transition: all 0.2s ease !important;
+  }
+
+  .refresh-btn:hover,
+  .add-btn:hover {
+    transform: translateY(-1px) !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1) !important;
+  }
+
+  .add-btn {
+    background: var(--google-blue) !important;
+    color: white !important;
+    border-color: var(--google-blue) !important;
+  }
+
+  .add-btn:hover {
+    background: var(--google-blue-hover) !important;
+  }
+
+  /* Theme toggle in header */
+  .theme-switch-wrapper-header {
+    margin-left: 8px;
+  }
+
+  .theme-switch-wrapper-header .theme-switch {
+    position: relative;
+    display: inline-block;
+    width: 48px;
+    height: 28px;
+  }
+
+  .theme-switch-wrapper-header .theme-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+  }
+
+  .theme-switch-wrapper-header .slider {
+    background-color: var(--google-gray-600);
+    border-radius: 28px;
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    transition: var(--transition);
+    box-shadow: var(--shadow-1);
+  }
+
+  .theme-switch-wrapper-header .slider::before {
+    position: absolute;
+    content: "";
+    height: 20px;
+    width: 20px;
+    left: 4px;
+    bottom: 4px;
+    background-color: white;
+    border-radius: 50%;
+    transition: var(--transition);
+    z-index: 2;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  }
+
+  .theme-switch-wrapper-header input:checked+.slider {
+    background-color: var(--google-blue);
+  }
+
+  .theme-switch-wrapper-header input:checked+.slider::before {
+    transform: translateX(20px);
+  }
+
+  .theme-switch-wrapper-header .icon {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 10px;
+    height: 10px;
+    pointer-events: none;
+    transition: var(--transition);
+  }
+
+  .theme-switch-wrapper-header .sun {
+    left: 6px;
+    opacity: 1;
+  }
+
+  .theme-switch-wrapper-header .moon {
+    right: 6px;
+    opacity: 0.3;
+  }
+
+  .theme-switch-wrapper-header input:checked+.slider .moon {
+    opacity: 1;
+  }
+
+  .theme-switch-wrapper-header input:checked+.slider .sun {
+    opacity: 0.3;
+  }
+
+  [data-theme="dark"] .theme-switch-wrapper-header input:checked+.slider {
+    background-color: #8ab4f8;
+  }
+
+  .calendar-footer {
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border-color);
+  }
+
+  .calendar-legend {
+    display: flex;
+    justify-content: center;
+    gap: 24px;
+    flex-wrap: wrap;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    color: var(--text-secondary);
+  }
+
+  .legend-color {
+    width: 12px;
+    height: 12px;
+    border-radius: 2px;
+    display: inline-block;
+  }
+
+  @media (max-width: 768px) {
+    .calendar-header {
+      flex-direction: column;
+      gap: 12px;
+      text-align: center;
+    }
+
+    .calendar-header h4 {
+      font-size: 18px;
+    }
+
+    .calendar-actions {
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    .theme-switch-wrapper-header {
+      margin-left: 0;
+      margin-top: 8px;
+    }
+
+    .calendar-legend {
+      gap: 16px;
+      font-size: 12px;
+    }
+
+    .legend-item {
+      gap: 6px;
+    }
+
+    .legend-color {
+      width: 10px;
+      height: 10px;
+    }
+  }
+</style>
+
+<script>
+  function safeNavigateToForm() {
+  console.log('🔄 Safe navigate to form called from calendar');
+  
+  // Check if global function exists
+  if (typeof window.safeNavigateToForm === 'function' && window.safeNavigateToForm !== safeNavigateToForm) {
+    window.safeNavigateToForm();
+    return;
+  }
+  
+  // Fallback: use checkAuthAndNavigate directly
+  if (typeof checkAuthAndNavigate === 'function') {
+    checkAuthAndNavigate('form');
+  } else if (typeof window.checkAuthAndNavigate === 'function') {
+    window.checkAuthAndNavigate('form');
+  } else {
+    // Last resort: direct navigation with simple auth check
+    const user = window.currentUser || currentUser;
+    if (user && user.email) {
+      loadView('form');
+    } else {
+      if (typeof Swal !== 'undefined') {
+        Swal.fire({
+          icon: 'info',
+          title: 'จำเป็นต้องเข้าสู่ระบบ',
+          text: 'กรุณาเข้าสู่ระบบเพื่อทำการจองห้องประชุม',
+          confirmButtonText: 'เข้าสู่ระบบ'
+        }).then(() => {
+          loadView('login');
+        });
+      } else {
+        alert('กรุณาเข้าสู่ระบบเพื่อทำการจองห้องประชุม');
+        loadView('login');
+      }
+    }
+  }
+}
+  // Refresh calendar data
+  function refreshCalendar() {
+    if (typeof google !== 'undefined' && google.script && google.script.run) {
+      // Show loading state
+      const refreshBtn = document.querySelector('.refresh-btn');
+      const originalText = refreshBtn.innerHTML;
+      refreshBtn.innerHTML = '⏳ กำลังโหลด...';
+      refreshBtn.disabled = true;
+
+      // Call server function to get updated events
+      google.script.run
+        .withSuccessHandler(function(events) {
+          if (window.calendar && typeof renderCalendar === 'function') {
+            renderCalendar(events);
+          }
+          
+          // Reset button
+          refreshBtn.innerHTML = originalText;
+          refreshBtn.disabled = false;
+          
+          // Show success message
+          if (typeof Swal !== 'undefined') {
+            Swal.fire({
+              icon: 'success',
+              title: 'รีเฟรชสำเร็จ',
+              text: 'ข้อมูลปฏิทินได้รับการอัปเดตแล้ว',
+              timer: 1500,
+              showConfirmButton: false
+            });
+          }
+        })
+        .withFailureHandler(function(error) {
+          console.error('Failed to refresh calendar:', error);
+          
+          // Reset button
+          refreshBtn.innerHTML = originalText;
+          refreshBtn.disabled = false;
+          
+          // Show error message
+          if (typeof Swal !== 'undefined') {
+            Swal.fire({
+              icon: 'error',
+              title: 'เกิดข้อผิดพลาด',
+              text: 'ไม่สามารถรีเฟรชข้อมูลได้ กรุณาลองใหม่อีกครั้ง'
+            });
+          }
+        })
+        .listEvents();
+    } else {
+      // Fallback for testing/development
+      console.log('Google Apps Script not available - using fallback refresh');
+      if (window.calendar && typeof renderCalendar === 'function') {
+        renderCalendar([]);
+      }
+    }
+  }
+
+  // Initialize theme toggle in header when view loads
+  document.addEventListener('DOMContentLoaded', function() {
+    // Sync header toggle with main toggle
+    const headerToggle = document.getElementById('themeToggleHeader');
+    if (headerToggle) {
+      const savedTheme = localStorage.getItem("booking-theme") || "light";
+      headerToggle.checked = savedTheme === "dark";
+    }
+  });
+
+  // Toggle theme function
+  function toggleTheme() {
+    const headerToggle = document.getElementById('themeToggleHeader');
+    
+    let newTheme;
+    if (headerToggle && headerToggle.checked !== undefined) {
+      newTheme = headerToggle.checked ? "dark" : "light";
+    } else {
+      // Fallback to current theme
+      const currentTheme = document.documentElement.getAttribute("data-theme") || "light";
+      newTheme = currentTheme === "dark" ? "light" : "dark";
+    }
+    
+    // Apply theme
+    document.documentElement.setAttribute("data-theme", newTheme);
+    localStorage.setItem("booking-theme", newTheme);
+    
+    // Update global toggle function if exists
+    if (typeof window.toggleTheme === 'function' && window.toggleTheme !== toggleTheme) {
+      window.toggleTheme = toggleTheme;
+    }
+    
+    console.log('🎨 Theme changed to:', newTheme);
+  }
+
+  // Initialize when this view loads
+  setTimeout(initializeThemeToggle, 100);
+</script>
