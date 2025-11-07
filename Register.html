@@ -1,0 +1,430 @@
+<!-- Register.html (with dark theme support) -->
+<div class="auth-container">
+  <div class="auth-card">
+    <div class="auth-header">
+      <div class="auth-logo">
+        <span class="logo-icon">🏢</span>
+        <h2 class="logo-text">ระบบจองห้องประชุม</h2>
+      </div>
+      <h3 class="auth-title">สมัครสมาชิก</h3>
+      <p class="auth-subtitle">กรุณากรอกข้อมูลให้ครบถ้วน</p>
+    </div>
+
+    <form id="registerForm" class="auth-form">
+      <div class="form-group">
+        <label for="registerName">ชื่อ-นามสกุล</label>
+        <input type="text" id="registerName" name="name" class="form-input" required>
+      </div>
+
+      <div class="form-group">
+        <label for="registerNickname">ชื่อเล่น</label>
+        <input type="text" id="registerNickname" name="nickname" class="form-input" required>
+      </div>
+
+      <div class="form-group">
+        <label for="registerEmail">อีเมล (สำหรับล็อกอิน)</label>
+        <input type="email" id="registerEmail" name="email" class="form-input" required>
+      </div>
+
+      <div class="form-group">
+        <label for="registerPassword">รหัสผ่าน</label>
+        <input type="password" id="registerPassword" name="password" class="form-input" required>
+      </div>
+
+      <div class="form-group">
+        <label for="registerPhone">เบอร์โทรศัพท์</label>
+        <input type="tel" id="registerPhone" name="phone" class="form-input" required>
+      </div>
+
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary">✅ สร้างบัญชี</button>
+        <button type="button" class="btn btn-secondary" onclick="loadView('login')">ย้อนกลับ</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<style>
+  :root {
+    --bg-color: #ffffff;
+    --bg-secondary: #f7f9fc;
+    --text-color: #111111;
+    --text-secondary: #666666;
+    --border-color: #dddddd;
+    --google-blue: #1a73e8;
+    --google-blue-hover: #1765cc;
+    --shadow-2: 0 4px 12px rgba(0, 0, 0, 0.1);
+  }
+
+  [data-theme="dark"] {
+    --bg-color: #1e1e1e;
+    --bg-secondary: #121212;
+    --text-color: #f1f1f1;
+    --text-secondary: #bbbbbb;
+    --border-color: #333333;
+    --google-blue: #8ab4f8;
+    --google-blue-hover: #aecbfa;
+    --shadow-2: 0 4px 12px rgba(0, 0, 0, 0.5);
+  }
+
+  html, body {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    overflow-x: hidden;
+  }
+
+  body {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .auth-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100%;
+    padding: 20px;
+    background: var(--bg-secondary);
+    overflow-y: auto;
+  }
+
+  .auth-card {
+    background: var(--bg-color);
+    border-radius: 12px;
+    box-shadow: var(--shadow-2);
+    padding: 0;
+    width: 90%;
+    max-width: 420px;
+    overflow: hidden;
+  }
+
+  .auth-header {
+    padding: 32px 32px 24px 32px;
+    text-align: center;
+    background: var(--bg-color);
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .auth-logo {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+
+  .logo-icon {
+    font-size: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 48px;
+    height: 48px;
+    background: var(--google-blue);
+    border-radius: 50%;
+    color: white;
+  }
+
+  .logo-text,
+  .auth-title,
+  .form-label {
+    color: var(--text-color);
+  }
+
+  .auth-title {
+    font-size: 24px;
+    font-weight: 400;
+    margin: 0 0 8px 0;
+  }
+
+  .auth-subtitle {
+    font-size: 16px;
+    color: var(--text-secondary);
+    margin: 0;
+    line-height: 1.5;
+  }
+
+  .auth-form {
+    padding: 32px;
+  }
+
+  .form-group {
+    margin-bottom: 20px;
+  }
+
+  .form-input {
+    width: 100%;
+    padding: 12px 16px;
+    border: 2px solid var(--border-color);
+    border-radius: 8px;
+    background: var(--bg-color);
+    color: var(--text-color);
+    font-size: 16px;
+    font-family: inherit;
+    box-sizing: border-box;
+  }
+
+  .form-input:focus {
+    outline: none;
+    border-color: var(--google-blue);
+    box-shadow: 0 0 0 3px rgba(26, 115, 232, 0.1);
+  }
+
+  .form-input::placeholder {
+    color: var(--text-secondary);
+  }
+
+  .form-input.error {
+    border-color: #ea4335;
+  }
+
+  .error-message {
+    color: #ea4335;
+    font-size: 12px;
+    margin-top: 4px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .form-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  @media (min-width: 480px) {
+    .form-actions {
+      flex-direction: row;
+      justify-content: space-between;
+    }
+  }
+
+  .btn {
+    width: 100%;
+    padding: 12px 24px;
+    border: none;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: 500;
+    font-family: inherit;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    transition: 0.2s;
+  }
+
+  .btn-primary {
+    background: var(--google-blue);
+    color: white;
+  }
+
+  .btn-primary:hover {
+    background: var(--google-blue-hover);
+  }
+
+  .btn-secondary {
+    background: transparent;
+    border: 1px solid var(--border-color);
+    color: var(--text-color);
+  }
+
+  .btn-secondary:hover {
+    background: var(--bg-secondary);
+  }
+</style>
+
+
+
+<!-- แก้ไข Register.html Script Section -->
+<script>
+  safeReady (function () {
+  const form = document.getElementById('registerForm');
+  if (!form) {
+    console.error('❌ Register form not found');
+    return;
+  }
+
+  const btn = form.querySelector('button[type="submit"]');
+
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    
+    console.log('📝 Register form submitted');
+
+    // Clear previous errors
+    clearErrors();
+
+    // Get form data
+    const name = document.getElementById("registerName").value.trim();
+    const nickname = document.getElementById("registerNickname").value.trim();
+    const email = document.getElementById("registerEmail").value.trim();
+    const password = document.getElementById("registerPassword").value.trim();
+    const phone = document.getElementById("registerPhone").value.trim();
+
+    console.log('📋 Form data:', { name, nickname, email, phone, passwordLength: password.length });
+
+    // Validate
+    if (!name || name.length < 2) {
+      showError('registerName', 'กรุณากรอกชื่อ-นามสกุล (อย่างน้อย 2 ตัวอักษร)');
+      return;
+    }
+    if (!nickname) {
+      showError('registerNickname', 'กรุณากรอกชื่อเล่น');
+      return;
+    }
+    if (!email || !isValidEmail(email)) {
+      showError('registerEmail', 'กรุณากรอกอีเมลที่ถูกต้อง');
+      return;
+    }
+    if (!password || password.length < 4) {
+      showError('registerPassword', 'รหัสผ่านต้องมีอย่างน้อย 4 ตัวอักษร');
+      return;
+    }
+    if (!phone) {
+      showError('registerPhone', 'กรุณากรอกเบอร์โทรศัพท์');
+      return;
+    }
+
+    // Disable button and show loading
+    btn.disabled = true;
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '⏳ กำลังสมัคร...';
+
+    const userData = { 
+      name, 
+      nickname,
+      email, 
+      password,
+      phone 
+    };
+
+    console.log('🚀 Sending registration data:', userData);
+
+    // Check if Google Apps Script is available
+    if (typeof google !== 'undefined' && google.script && google.script.run) {
+      google.script.run
+        .withSuccessHandler(function(result) {
+          console.log('✅ Registration successful:', result);
+          
+          btn.disabled = false;
+          btn.innerHTML = originalText;
+          
+          if (typeof Swal !== 'undefined') {
+            Swal.fire({
+              icon: 'success',
+              title: 'สมัครสมาชิกสำเร็จ! 🎉',
+              text: 'กำลังกลับสู่หน้าเข้าสู่ระบบ...',
+              timer: 2000,
+              showConfirmButton: false
+            });
+          } else {
+            alert('สมัครสมาชิกสำเร็จ!');
+          }
+          
+          // Reset form
+          form.reset();
+          
+          // Redirect to login after delay
+          setTimeout(() => {
+            if (typeof loadView === 'function') {
+              loadView('login');
+            } else {
+              console.log('✅ Registration complete - redirect to login');
+            }
+          }, 2000);
+        })
+        .withFailureHandler(function(error) {
+          console.error('❌ Registration failed:', error);
+          
+          btn.disabled = false;
+          btn.innerHTML = originalText;
+          
+          if (typeof Swal !== 'undefined') {
+            Swal.fire({
+              icon: 'error',
+              title: 'สมัครไม่สำเร็จ',
+              text: error.message || 'เกิดข้อผิดพลาด กรุณาลองใหม่'
+            });
+          } else {
+            alert('สมัครไม่สำเร็จ: ' + (error.message || 'เกิดข้อผิดพลาด'));
+          }
+        })
+        .registerUser(userData);
+    } else {
+      // Fallback for testing without Google Apps Script
+      console.warn('⚠️ Google Apps Script not available - testing mode');
+      
+      setTimeout(() => {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+        
+        if (typeof Swal !== 'undefined') {
+          Swal.fire({
+            icon: 'info',
+            title: 'โหมดทดสอบ',
+            text: 'เชื่อมต่อกับ Google Apps Script เพื่อใช้งานจริง'
+          });
+        } else {
+          alert('โหมดทดสอบ: เชื่อมต่อกับ Google Apps Script เพื่อใช้งานจริง');
+        }
+      }, 1000);
+    }
+  });
+
+  // Focus first input
+  const firstInput = document.getElementById('registerName');
+  if (firstInput) {
+    firstInput.focus();
+  }
+});
+
+function showError(fieldId, message) {
+  const field = document.getElementById(fieldId);
+  if (field) {
+    field.classList.add('error');
+    
+    // Remove existing error message
+    const existingError = field.parentNode.querySelector('.error-message');
+    if (existingError) existingError.remove();
+    
+    // Add new error message
+    const errorDiv = document.createElement('div');
+    errorDiv.className = 'error-message';
+    errorDiv.innerHTML = `⚠️ ${message}`;
+    field.parentNode.appendChild(errorDiv);
+    
+    // Focus the field with error
+    field.focus();
+  }
+}
+
+function clearErrors() {
+  const errorFields = document.querySelectorAll('.form-input.error');
+  errorFields.forEach(field => {
+    field.classList.remove('error', 'success');
+  });
+
+  const errorMessages = document.querySelectorAll('.error-message');
+  errorMessages.forEach(msg => msg.remove());
+}
+
+function isValidEmail(email) {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email);
+}
+
+// Debug function
+function debugRegister() {
+  console.log('🔧 Debug register form');
+  console.log('Google Apps Script available:', typeof google !== 'undefined' && google.script);
+  console.log('Swal available:', typeof Swal !== 'undefined');
+  console.log('loadView available:', typeof loadView !== 'undefined');
+}
+
+// Call debug on load
+debugRegister();
+</script>
