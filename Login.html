@@ -1,0 +1,417 @@
+<!-- Login.html -->
+<div class="auth-container">
+  <div class="auth-card">
+    <div class="auth-header">
+      <div class="auth-logo">
+        <span class="logo-icon">🏢</span>
+        <h2 class="logo-text">ระบบจองห้องประชุม</h2>
+      </div>
+      <h3 class="auth-title">เข้าสู่ระบบ</h3>
+      <p class="auth-subtitle">เพื่อเข้าใช้งานระบบจองห้องประชุม</p>
+
+    </div>
+
+    <form id="loginForm" class="auth-form">
+      <div class="form-group">
+        <label for="loginEmail" class="form-label">อีเมล</label>
+        <input
+          id="loginEmail"
+          name="email"
+          type="email"
+          class="form-input"
+          placeholder="example@company.com"
+          required
+        />
+      </div>
+
+      <div class="form-group">
+        <label for="loginPassword" class="form-label">รหัสผ่าน</label>
+        <input
+          id="loginPassword"
+          name="pwd"
+          type="password"
+          class="form-input"
+          placeholder="กรอกรหัสผ่าน"
+          required
+        />
+      </div>
+
+      <button type="submit" class="auth-btn primary" id="loginBtn">
+        <span class="btn-text">เข้าสู่ระบบ</span>
+      </button>
+
+      <div class="auth-footer">
+        <p class="auth-link-text">
+          ยังไม่มีบัญชี?
+          <a href="#" onclick="loadView('register'); return false;" class="auth-link">สมัครสมาชิก</a>
+        </p>
+        <p class="auth-link-text">
+          ลืมรหัสผ่าน? <a href="javascript:void(0)" class="auth-link"
+            onclick="console.log('🔐 Forgot password clicked'); setTimeout(() => { if(typeof loadView === 'function') { console.log('✅ loadView found'); loadView('forgot'); } else { console.log('❌ loadView not found'); location.reload(); } }, 100);">กดที่นี่</a>
+        </p>
+
+      </div>
+    </form>
+  </div>
+</div>
+
+<style>
+  :root {
+    --bg-color: #ffffff;
+    --bg-secondary: #f7f9fc;
+    --text-color: #111111;
+    --text-secondary: #666666;
+    --border-color: #dddddd;
+    --google-blue: #1a73e8;
+    --google-blue-hover: #1765cc;
+    --shadow-2: 0 4px 12px rgba(0, 0, 0, 0.1);
+  }
+
+  [data-theme="dark"] {
+    --bg-color: #1e1e1e;
+    --bg-secondary: #121212;
+    --text-color: #f1f1f1;
+    --text-secondary: #bbbbbb;
+    --border-color: #333333;
+    --google-blue: #8ab4f8;
+    --google-blue-hover: #aecbfa;
+    --shadow-2: 0 4px 12px rgba(0, 0, 0, 0.5);
+  }
+
+  .auth-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: calc(100vh - 100px);
+    padding: 20px;
+    background: transparent !important;
+  }
+
+  .auth-card {
+    background: var(--bg-color);
+    border-radius: 12px;
+    box-shadow: var(--shadow-2);
+    padding: 0;
+    width: 100%;
+    max-width: 400px;
+    overflow: hidden;
+  }
+
+  .auth-header {
+    padding: 32px 32px 24px 32px;
+    text-align: center;
+    background: var(--bg-color);
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .auth-logo {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+
+  .logo-icon {
+    font-size: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 48px;
+    height: 48px;
+    background: var(--google-blue);
+    border-radius: 50%;
+    color: white;
+  }
+
+  .logo-text {
+    font-size: 18px;
+    font-weight: 500;
+    color: var(--text-color);
+    margin: 0;
+  }
+
+  .auth-title {
+    font-size: 24px;
+    font-weight: 400;
+    color: var(--text-color);
+    margin: 0 0 8px 0;
+  }
+
+  .auth-subtitle {
+    font-size: 16px;
+    color: var(--text-secondary);
+    margin: 0;
+    line-height: 1.5;
+  }
+
+  .auth-form {
+    padding: 32px;
+  }
+
+  .form-group {
+    margin-bottom: 24px;
+  }
+
+  .form-label {
+    display: block;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-color);
+    margin-bottom: 8px;
+  }
+
+  .form-input {
+    width: 100%;
+    padding: 12px 16px;
+    border: 2px solid var(--border-color);
+    border-radius: 8px;
+    background: var(--bg-color);
+    color: var(--text-color);
+    font-size: 16px;
+    font-family: inherit;
+    transition: var(--transition);
+    box-sizing: border-box;
+  }
+
+  .form-input:focus {
+    outline: none;
+    border-color: var(--google-blue);
+    box-shadow: 0 0 0 3px rgba(26, 115, 232, 0.1);
+  }
+
+  .form-input::placeholder {
+    color: var(--text-secondary);
+  }
+
+  .auth-btn {
+    width: 100%;
+    padding: 12px 24px;
+    border: none;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: 500;
+    font-family: inherit;
+    cursor: pointer;
+    transition: var(--transition);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-bottom: 24px;
+  }
+
+  .auth-btn.primary {
+    background: var(--google-blue);
+    color: white;
+  }
+
+  .auth-btn.primary:hover {
+    background: var(--google-blue-hover);
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-2);
+  }
+
+  .auth-btn.primary:active {
+    transform: translateY(0);
+  }
+
+  .auth-btn:disabled {
+    background: var(--google-gray-400);
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+  }
+
+  .auth-btn.loading {
+    position: relative;
+    color: transparent;
+  }
+
+  .auth-btn.loading::after {
+    content: '';
+    position: absolute;
+    width: 20px;
+    height: 20px;
+    border: 2px solid transparent;
+    border-top-color: currentColor;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+  }
+
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  .auth-footer {
+    text-align: center;
+    padding-top: 16px;
+    border-top: 1px solid var(--border-color);
+  }
+
+  .auth-link-text {
+    font-size: 14px;
+    color: var(--text-secondary);
+    margin: 0;
+  }
+
+  .auth-link {
+    color: var(--google-blue);
+    text-decoration: none;
+    font-weight: 500;
+    transition: var(--transition);
+  }
+
+  .auth-link:hover {
+    text-decoration: underline;
+  }
+
+  /* Dark theme adjustments */
+  [data-theme="dark"] .auth-btn.primary {
+    background: #8ab4f8;
+    color: var(--google-gray-900);
+  }
+
+  [data-theme="dark"] .auth-btn.primary:hover {
+    background: #aecbfa;
+  }
+
+  [data-theme="dark"] .form-input:focus {
+    border-color: #8ab4f8;
+    box-shadow: 0 0 0 3px rgba(138, 180, 248, 0.1);
+  }
+
+  [data-theme="dark"] .auth-link {
+    color: #8ab4f8;
+  }
+
+  /* Responsive */
+  @media (max-width: 480px) {
+    .auth-container {
+      padding: 16px;
+      align-items: flex-start;
+      padding-top: 40px;
+    }
+
+    .auth-card {
+      max-width: 100%;
+    }
+
+    .auth-header {
+      padding: 24px 24px 20px 24px;
+    }
+
+    .auth-form {
+      padding: 24px;
+    }
+
+    .logo-text {
+      font-size: 16px;
+    }
+
+    .auth-title {
+      font-size: 20px;
+    }
+
+    .form-input {
+      font-size: 16px;
+      /* Prevent zoom on iOS */
+    }
+  }
+</style>
+
+<script>
+  setTimeout(function(){
+    document.getElementById("loginForm").addEventListener("submit", function(e) {
+      e.preventDefault();
+      
+      const btn = document.getElementById("loginBtn");
+      const originalText = btn.innerHTML;
+      
+      // Show loading state
+      btn.disabled = true;
+      btn.classList.add("loading");
+      btn.innerHTML = '<span class="btn-text">กำลังเข้าสู่ระบบ...</span>';
+      
+      const data = {
+        email: e.target.email.value.trim(),
+        pwd: e.target.pwd.value.trim()
+      };
+
+      if (typeof google !== 'undefined' && google.script && google.script.run) {
+        google.script.run
+          .withSuccessHandler(function(result) {
+            btn.disabled = false;
+            btn.classList.remove("loading");
+            btn.innerHTML = originalText;
+            
+            if (typeof Swal !== 'undefined') {
+              Swal.fire({
+                icon: 'success',
+                title: 'เข้าสู่ระบบสำเร็จ! 🎉',
+                text: 'ยินดีต้อนรับเข้าสู่ระบบจองห้องประชุม',
+                timer: 2000,
+                showConfirmButton: false
+              });
+            }
+            
+            if (result && result.email) {
+              currentUser = {
+                email: result.email,
+                name: result.name,
+                role: result.role
+              };
+              isAuthChecked = true;
+
+              if (typeof renderUserBox === 'function') {
+                renderUserBox(currentUser);
+              }
+
+              setTimeout(() => {
+                loadView('calendar');
+              }, 1500);
+            } else {
+              Swal.fire('ไม่สามารถเข้าสู่ระบบได้', 'ไม่พบข้อมูลผู้ใช้', 'error');
+            }
+          })
+          .withFailureHandler(function(error) {
+            btn.disabled = false;
+            btn.classList.remove("loading");
+            btn.innerHTML = originalText;
+            
+            if (typeof Swal !== 'undefined') {
+              Swal.fire({
+                icon: 'error',
+                title: 'เข้าสู่ระบบไม่สำเร็จ',
+                text: error.message || 'กรุณาตรวจสอบอีเมลและรหัสผ่าน'
+              });
+            }
+          })
+          .loginUser(data);
+      } else {
+        // Fallback for testing
+        setTimeout(() => {
+          btn.disabled = false;
+          btn.classList.remove("loading");
+          btn.innerHTML = originalText;
+          
+          if (typeof Swal !== 'undefined') {
+            Swal.fire({
+              icon: 'info',
+              title: 'โหมดทดสอบ',
+              text: 'เชื่อมต่อกับ Google Apps Script เพื่อใช้งานจริง'
+            });
+          }
+        }, 1000);
+      }
+    });
+
+    // Auto-focus first input - ย้ายมาใน safeReady
+    const emailInput = document.getElementById('loginEmail');
+    if (emailInput) {
+      emailInput.focus();
+    }
+  }, 100);
+</script>
