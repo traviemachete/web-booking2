@@ -1,1906 +1,740 @@
-<!-- JavaScript.html -->
-<script>
-  // ===== EMERGENCY FIX - เพิ่มที่ต้นไฟล์ JavaScript.html =====
 
-// Global error handler เพื่อป้องกันหน้าขาว
-window.addEventListener('error', function(e) {
-  console.error('💥 JavaScript Error:', e.error);
-  console.error('📍 Location:', e.filename + ':' + e.lineno);
-  
-  // ป้องกันไม่ให้หน้าขาวโดยแสดง error message
-  const mainContent = document.getElementById('mainContent');
-  if (mainContent && !mainContent.innerHTML.trim()) {
-    mainContent.innerHTML = `
-      <div style="padding: 40px; text-align: center; color: #dc3545;">
-        <h3>⚠️ เกิดข้อผิดพลาด</h3>
-        <p>กรุณารีเฟรชหน้าเว็บ หรือติดต่อผู้ดูแลระบบ</p>
-        <button onclick="location.reload()" style="padding: 10px 20px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer;">
-          🔄 รีเฟรชหน้า
-        </button>
-        <details style="margin-top: 20px; text-align: left;">
-          <summary>รายละเอียดข้อผิดพลาด (สำหรับผู้ดูแล)</summary>
-          <pre style="background: #f8f9fa; padding: 10px; border-radius: 5px; font-size: 12px;">${e.error?.stack || e.error?.message || 'Unknown error'}</pre>
-        </details>
-      </div>
-    `;
-  }
-  
-  return false; // ป้องกัน default error handling
-});
+/* ------------ Code.gs ------------ */
+const SHEET_NAME = 'Sheet1';
+const TZ = 'Asia/Bangkok';
 
-// Safe DOM ready function
-function safeReady(callback) {
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', callback);
-  } else {
-    callback();
-  }
+/* -------------------------------------------------- */
+/*  WEB‑APP ENTRY                                     */
+/* -------------------------------------------------- */
+function doGet() {
+  return HtmlService.createTemplateFromFile("Index")
+    .evaluate()
+    .setTitle("ระบบจองห้องประชุม");
+}
+function include(name) {
+  return HtmlService.createHtmlOutputFromFile(name).getContent();
 }
 
-// Safe element selection
-function safeGetElement(id) {
+// เพิ่ม function สำหรับ compatibility กับ frontend
+function loginWithEmailPassword(email, password) {
   try {
-    const element = document.getElementById(id);
-    if (!element) {
-      console.warn(`⚠️ Element not found: ${id}`);
+    console.log('🔗 LoginWithEmailPassword called with:', {
+      email: email,
+      passwordProvided: !!password
+    });
+
+    if (!email || !password) {
+      throw new Error('กรุณากรอกอีเมลและรหัสผ่านให้ครบถ้วน');
     }
-    return element;
-  } catch (e) {
-    console.error(`❌ Error getting element ${id}:`, e);
-    return null;
+
+    return loginUser({
+      email: email,
+      pwd: password
+    });
+
+  } catch (err) {
+    console.error('❌ LoginWithEmailPassword error:', err);
+    throw new Error(err.message || 'เกิดข้อผิดพลาดในการเข้าสู่ระบบ');
   }
 }
 
-// Safe event listener addition
-function safeAddEventListener(element, event, handler) {
-  try {
-    if (element && typeof element.addEventListener === 'function') {
-      element.addEventListener(event, handler);
-      return true;
-    } else {
-      console.warn(`⚠️ Cannot add event listener to:`, element);
-      return false;
+// เพิ่ม debug function สำหรับทดสอบ hash
+function testHash() {
+  const testPasswords = ['123456', '1234', 'test123'];
+
+  testPasswords.forEach(pwd => {
+    try {
+      const hashed = hash(pwd);
+      console.log(`Password "${pwd}" -> Hash: ${hashed.substring(0, 20)}...`);
+    } catch (err) {
+      console.error(`Hash failed for "${pwd}":`, err);
     }
-  } catch (e) {
-    console.error(`❌ Error adding event listener:`, e);
-    return false;
+  });
+}
+
+/* -------------------------------------------------- */
+/*  CALENDAR API  (→ FullCalendar)                    */
+/* -------------------------------------------------- */
+function listEvents() {
+  const sh = SpreadsheetApp.getActive().getSheetByName(SHEET_NAME);
+  const rows = sh.getDataRange().getValues();
+  const events = [];
+
+  for (let i = 1; i < rows.length; i++) {
+    const r = rows[i];
+    const [id, date, startT, endT, name, department, company, purpose, email, timestamp, status] =
+      [r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8], r[9], r[10]];
+
+    const startObj = mergeDateTime(date, startT);
+    const endObj = mergeDateTime(date, endT);
+    if (!startObj || !endObj) continue;            // skip broken rows
+
+    const start = startObj.toISOString();          // ← FullCalendar expects ISO string
+    const end = endObj.toISOString();
+
+    const stat = String(status || '').toLowerCase();
+    const color = stat === 'cancelled' ? '#e57373' : '#81c784';
+
+    events.push({
+      id,
+      title: `${(purpose || 'ประชุม').substring(0, 50)}`,
+      start,
+      end,
+      backgroundColor: color,
+      borderColor: color,
+      extendedProps: {
+        booker: name,
+        department,
+        company,
+        purpose,
+        email,
+        timestamp: convertTimestamp(timestamp),
+        status: status || ''
+      }
+    });
+  }
+  return events;               // usable by google.script.run
+}
+
+/* -------------------------------------------------- */
+/*  BOOKING API                                       */
+/* -------------------------------------------------- */
+function submitBooking(data) {
+  const clash = isDuplicate(data.date, data.start, data.end);
+  if (clash.dup) throw new Error(clash.msg);
+
+  const sh = SpreadsheetApp.getActive().getSheetByName(SHEET_NAME);
+  const id = sh.getLastRow();
+  const now = Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy, HH:mm:ss');
+
+  sh.appendRow([
+    id,
+    data.date,
+    data.start,
+    data.end,
+    data.name,
+    data.department,
+    data.company,
+    data.purpose,
+    data.email,
+    now,
+    ''
+  ]);
+  return { status: 'ok' };
+}
+
+/* -------------------------------------------------- */
+/*  DUPLICATE CHECK                                   */
+/* -------------------------------------------------- */
+function isDuplicate(dateISO, tStart, tEnd) {
+  const sh = SpreadsheetApp.getActive().getSheetByName(SHEET_NAME);
+  const rows = sh.getDataRange().getValues().slice(1);
+
+  const reqStart = new Date(`${dateISO}T${padTime(tStart)}:00`).getTime();
+  const reqEnd = new Date(`${dateISO}T${padTime(tEnd)}:00`).getTime();
+
+  for (const r of rows) {
+    const [, d, st, et, booker] = r;
+    if (!d || !st || !et) continue;
+
+    const dISO = (d instanceof Date)
+      ? Utilities.formatDate(d, TZ, 'yyyy-MM-dd')
+      : (String(d).includes('-') ? d : Utilities.formatDate(parseDDMMYYYY(d), TZ, 'yyyy-MM-dd'));
+    if (dISO !== dateISO) continue;
+
+    const slotStart = new Date(`${dISO}T${padTime(st)}:00`).getTime();
+    const slotEnd = new Date(`${dISO}T${padTime(et)}:00`).getTime();
+
+    if (reqStart < slotEnd && reqEnd > slotStart) {
+      return {
+        dup: true,
+        msg: `ช่วง ${padTime(tStart)}‑${padTime(tEnd)} ถูกจองแล้วโดย “${booker}”\nกรุณาเลือกเวลาอื่นหรือติดต่อผู้ดูแล`
+      };
+    }
+  }
+  return { dup: false };
+}
+function padTime(t) {
+  if (t instanceof Date) return t.toTimeString().slice(0, 5);
+  if (typeof t === 'number') {
+    const mins = Math.round(t * 1440); return `${String(Math.floor(mins / 60)).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`;
+  }
+  const s = String(t).trim();
+  if (s.includes(':')) {
+    const [h, m = '00'] = s.split(':'); return `${h.padStart(2, '0')}:${m.padStart(2, '0')}`;
+  }
+  return `${s.padStart(2, '0')}:00`;
+}
+
+/* -------------------------------------------------- */
+/*  DATE‑TIME HELPERS                                 */
+/* -------------------------------------------------- */
+function mergeDateTime(dateVal, timeVal) {
+  if (!dateVal || !timeVal) return null;
+  const dObj = (dateVal instanceof Date)
+    ? new Date(dateVal)
+    : (String(dateVal).includes('-') ? new Date(dateVal) : parseDDMMYYYY(dateVal));
+  if (isNaN(dObj)) return null;
+  const [h, m] = padTime(timeVal).split(':').map(Number);
+  dObj.setHours(h, m, 0, 0);
+  return dObj;                   //  ← คืน Date object (ไป toISOString ภายหลัง)
+}
+function parseDDMMYYYY(s) {
+  const [dd, mm, yy] = String(s).split('/');
+  const yyyy = (+yy > 2500) ? +yy - 543 : +yy;
+  return new Date(`${yyyy}-${mm}-${dd}`);
+}
+function convertTimestamp(ts) {
+  if (!ts) return '';
+  if (ts instanceof Date) return Utilities.formatDate(ts, TZ, "yyyy-MM-dd'T'HH:mm:ss");
+  const [dPart, tPart = '00:00:00'] = String(ts).split(', ');
+  const d = parseDDMMYYYY(dPart);
+  if (isNaN(d)) return '';
+  const [h = '00', m = '00', s = '00'] = tPart.split(':');
+  d.setHours(+h, +m, +s);
+  return Utilities.formatDate(d, TZ, "yyyy-MM-dd'T'HH:mm:ss");
+}
+
+/* ========== AUTH CONFIG ========== */
+const USER_SHEET = 'Users';
+
+/* แปลง plain password → hash (SHA-256 → base64) */
+function hash(pwd) {
+  try {
+    if (!pwd) {
+      console.error('❌ Hash: Password is empty or null');
+      return '';
+    }
+
+    const pwdStr = String(pwd);
+    console.log('🔐 Hashing password length:', pwdStr.length);
+
+    const digest = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, pwdStr);
+    const hashed = Utilities.base64Encode(digest);
+
+    console.log('✅ Hash generated successfully');
+    return hashed;
+
+  } catch (err) {
+    console.error('❌ Hash error:', err);
+    return '';
   }
 }
 
-// Safe function execution
-function safeExecute(fn, context = 'Unknown') {
+/* ดึงข้อมูลผู้ใช้จาก email */
+// แก้ไข findUser function - เพิ่ม safety checks
+function findUser(email) {
   try {
-    if (typeof fn === 'function') {
-      return fn();
-    } else {
-      console.warn(`⚠️ ${context}: Not a function`);
+    console.log('🔍 Finding user for email:', email);
+
+    if (!email) {
+      console.log('❌ Email is empty');
       return null;
     }
-  } catch (e) {
-    console.error(`❌ ${context} error:`, e);
+
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Users');
+    if (!sheet) {
+      console.log('❌ Users sheet not found');
+      return null;
+    }
+
+    const data = sheet.getDataRange().getValues();
+    console.log('📊 Sheet data rows:', data.length);
+
+    // ข้าม header row (row 0)
+    for (let i = 1; i < data.length; i++) {
+      const row = data[i];
+
+      // ตรวจสอบว่า row มีข้อมูลครบ
+      if (!row || row.length < 8) {
+        console.log(`⚠️ Row ${i} incomplete:`, row);
+        continue;
+      }
+
+      // ตรวจสอบ email (column D = index 3)
+      const userEmail = row[3];
+      if (!userEmail) {
+        console.log(`⚠️ Row ${i} has no email`);
+        continue;
+      }
+
+      // แปลงเป็น string และ toLowerCase safely
+      const emailStr = String(userEmail).toLowerCase().trim();
+      const searchEmailStr = String(email).toLowerCase().trim();
+
+      console.log(`🔍 Comparing: "${emailStr}" vs "${searchEmailStr}"`);
+
+      if (emailStr === searchEmailStr) {
+        console.log('✅ User found at row:', i + 1);
+
+        return {
+          row: i + 1,
+          id: row[0] || '',        // A: id
+          name: row[1] || '',      // B: name
+          nickname: row[2] || '',  // C: nickname  
+          email: row[3] || '',     // D: email
+          hash: row[4] || '',      // E: password (hashed)
+          phone: row[5] || '',     // F: phone
+          role: row[6] || 'user',  // G: role
+          created: row[7] || ''    // H: created_date
+        };
+      }
+    }
+
+    console.log('❌ User not found');
+    return null;
+
+  } catch (err) {
+    console.error('❌ FindUser error:', err);
     return null;
   }
 }
 
-// แทนที่ DOMContentLoaded event ทั้งหมดด้วยฟังก์ชันนี้
-safeReady(function() {
-  console.log('🚀 Safe DOM Ready - Initializing...');
-  
-  // Initialize theme first
-  safeExecute(() => {
-    const savedTheme = localStorage.getItem("booking-theme") || "light";
-    document.documentElement.setAttribute("data-theme", savedTheme);
-    console.log('🎨 Theme initialized:', savedTheme);
-  }, 'Theme initialization');
-  
-  // Check auth with safety
-  safeExecute(() => {
-    if (typeof checkAuthAndRenderUserBox === 'function') {
-      checkAuthAndRenderUserBox();
-    } else {
-      console.warn('⚠️ checkAuthAndRenderUserBox function not found');
-      // Fallback: render basic user box
-      const userInfo = safeGetElement('userInfo');
-      if (userInfo) {
-        userInfo.innerHTML = `
-          <div class="auth-prompt">
-            <p class="auth-text">ยังไม่ได้เข้าสู่ระบบ</p>
-            <button class="login-btn" onclick="safeLoadView('login')">
-              <span>🔑</span> เข้าสู่ระบบ
-            </button>
-          </div>
-        `;
-      }
-    }
-  }, 'Auth check');
-  
-  // Load default view with safety
-  setTimeout(() => {
-    safeExecute(() => {
-      if (typeof loadView === 'function') {
-        loadView('calendar');
-      } else {
-        console.warn('⚠️ loadView function not found');
-        safeLoadView('calendar');
-      }
-    }, 'Load default view');
-  }, 500);
-});
 
-// Safe loadView function สำหรับ fallback
-function safeLoadView(viewName) {
-  console.log('🔄 Safe loading view:', viewName);
-  
-  const mainContent = safeGetElement('mainContent');
-  if (!mainContent) {
-    console.error('❌ mainContent element not found');
-    return;
+/* เข้าสู่ระบบ */
+// แก้ไข loginUser function
+function loginUser(obj) {
+  try {
+    console.log('🔍 Login attempt starting...');
+    console.log('📧 Email:', obj?.email);
+    console.log('🔑 Password provided:', !!obj?.pwd);
+
+    // ตรวจสอบ input
+    if (!obj || !obj.email || !obj.pwd) {
+      console.log('❌ Invalid login data');
+      throw new Error('กรุณากรอกอีเมลและรหัสผ่านให้ครบถ้วน');
+    }
+
+    // หา user
+    const user = findUser(obj.email);
+    if (!user) {
+      console.log('❌ User not found:', obj.email);
+      throw new Error('ไม่พบบัญชีนี้ในระบบ');
+    }
+
+    console.log('👤 User found:', user.name);
+    console.log('🔐 Stored hash length:', user.hash?.length || 0);
+
+    // ตรวจสอบ password
+    if (!user.hash) {
+      console.log('❌ User has no password hash');
+      throw new Error('ข้อมูลบัญชีไม่ถูกต้อง กรุณาติดต่อผู้ดูแล');
+    }
+
+    const providedHash = hash(obj.pwd);
+    if (!providedHash) {
+      console.log('❌ Failed to hash provided password');
+      throw new Error('เกิดข้อผิดพลาดในการตรวจสอบรหัสผ่าน');
+    }
+
+    console.log('🔐 Password hash comparison:', {
+      provided: providedHash.substring(0, 10) + '...',
+      stored: user.hash.substring(0, 10) + '...',
+      match: user.hash === providedHash
+    });
+
+    if (user.hash !== providedHash) {
+      console.log('❌ Password mismatch for:', obj.email);
+      throw new Error('รหัสผ่านไม่ถูกต้อง');
+    }
+
+    // ✅ สร้าง session token
+    const sessionToken = Utilities.getUuid();
+    const sessionData = {
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      expiry: new Date(Date.now() + (24 * 60 * 60 * 1000)).toISOString()
+    };
+
+    const prop = PropertiesService.getScriptProperties();
+    prop.setProperty(`session_${sessionToken}`, JSON.stringify(sessionData));
+
+    console.log('✅ Login successful for:', obj.email);
+
+    const result = {
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      sessionToken: sessionToken
+    };
+
+    console.log('✅ Returning user data:', result);
+    return result;
+
+  } catch (err) {
+    console.error('❌ Login error:', err);
+    throw new Error(err.message || 'เกิดข้อผิดพลาดในการเข้าสู่ระบบ');
   }
-  
-  // Show loading
-  mainContent.innerHTML = `
-    <div class="loading-placeholder">
-      <div class="loading-content">
-        <div class="loading-spinner"></div>
-        <h3>🔄 กำลังโหลด...</h3>
-        <p>กรุณารอสักครู่</p>
-      </div>
-    </div>
-  `;
-  
-  // Basic fallback content
-  const fallbackContent = {
-    calendar: `
-      <div class="calendar-container">
-        <div class="calendar-header">
-          <h4>📅 ปฏิทินการใช้ห้องประชุม</h4>
-          <div class="calendar-actions">
-            <button class="btn" onclick="location.reload()">🔄 รีเฟรช</button>
-          </div>
-        </div>
-        <div id="calendar">
-          <div style="text-align: center; padding: 40px; color: #666;">
-            <h3>กำลังโหลดปฏิทิน...</h3>
-            <p>หากไม่แสดงผล กรุณารีเฟรชหน้า</p>
-          </div>
-        </div>
-      </div>
-    `,
-    login: `
-      <div class="auth-container">
-        <div class="auth-card">
-          <div class="auth-header">
-            <h3>🔑 เข้าสู่ระบบ</h3>
-          </div>
-          <div style="padding: 20px; text-align: center;">
-            <p>กรุณารีเฟรชหน้าเพื่อโหลดฟอร์มการเข้าสู่ระบบ</p>
-            <button onclick="location.reload()" style="padding: 10px 20px; background: #007bff; color: white; border: none; border-radius: 5px;">
-              🔄 รีเฟรชหน้า
-            </button>
-          </div>
-        </div>
-      </div>
-    `,
-    register: `
-      <div class="auth-container">
-        <div class="auth-card">
-          <div class="auth-header">
-            <h3>📝 สมัครสมาชิก</h3>
-          </div>
-          <div style="padding: 20px; text-align: center;">
-            <p>กรุณารีเฟรชหน้าเพื่อโหลดฟอร์มสมัครสมาชิก</p>
-            <button onclick="location.reload()" style="padding: 10px 20px; background: #007bff; color: white; border: none; border-radius: 5px;">
-              🔄 รีเฟรชหน้า
-            </button>
-          </div>
-        </div>
-      </div>
-    `
+}
+
+// REGISTER USER
+// แก้ไข registerUser function ให้ตรงกับ sheet structure
+function registerUser(data) {
+  try {
+    console.log('📝 Register attempt with data:', JSON.stringify(data, null, 2));
+
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Users');
+    if (!sheet) {
+      throw new Error('ไม่พบ Users sheet');
+    }
+
+    // ตรวจสอบข้อมูลที่ส่งมา
+    if (!data || !data.email || !data.password || !data.name) {
+      throw new Error('ข้อมูลไม่ครบถ้วน กรุณากรอกข้อมูลที่จำเป็น');
+    }
+
+    // ตรวจสอบว่ามี user นี้แล้วหรือไม่ - ใช้ findUser ที่แก้ไขแล้ว
+    const existingUser = findUser(data.email);
+    if (existingUser) {
+      console.log('❌ Email already exists:', data.email);
+      throw new Error(`อีเมล ${data.email} มีผู้ใช้งานแล้ว กรุณาใช้อีเมลอื่น`);
+    }
+
+    // หา ID ใหม่
+    const lastRow = sheet.getLastRow();
+    const newId = lastRow < 2 ? 1 : (sheet.getRange(lastRow, 1).getValue() || 0) + 1;
+
+    // สร้าง timestamp
+    const now = Utilities.formatDate(new Date(), TZ, 'd/M/yyyy, HH:mm:ss');
+
+    // Hash password
+    const hashedPassword = hash(data.password);
+    if (!hashedPassword) {
+      throw new Error('เกิดข้อผิดพลาดในการเข้ารหัสรหัสผ่าน');
+    }
+
+    // เพิ่มข้อมูลใหม่ - ตาม column order ใน sheet
+    const newRow = [
+      newId,                        // A: id
+      data.name || '',             // B: name  
+      data.nickname || '',         // C: nickname
+      data.email,                  // D: email
+      hashedPassword,              // E: password (hashed)
+      data.phone || '',            // F: phone
+      'user',                      // G: role
+      now                          // H: created_date
+    ];
+
+    sheet.appendRow(newRow);
+
+    console.log('✅ User registered successfully:', {
+      id: newId,
+      email: data.email,
+      name: data.name
+    });
+
+    return {
+      status: 'success',
+      message: 'สมัครสมาชิกสำเร็จ',
+      user: {
+        id: newId,
+        email: data.email,
+        name: data.name
+      }
+    };
+
+  } catch (err) {
+    console.error('❌ Register error:', err);
+    throw new Error(err.message || 'เกิดข้อผิดพลาดระหว่างสมัครสมาชิก');
+  }
+}
+
+/* ดึง session ปัจจุบัน */
+function getSessionUser(sessionToken) {
+  if (!sessionToken) return null;
+
+  const prop = PropertiesService.getScriptProperties();
+  const sessionData = prop.getProperty(`session_${sessionToken}`);
+
+  if (!sessionData) return null;
+
+  const session = JSON.parse(sessionData);
+
+  // ตรวจสอบ expiry
+  if (new Date() > new Date(session.expiry)) {
+    prop.deleteProperty(`session_${sessionToken}`);
+    return null;
+  }
+
+  return {
+    email: session.email,
+    name: session.name,
+    role: session.role
   };
-  
-  setTimeout(() => {
-    mainContent.innerHTML = fallbackContent[viewName] || fallbackContent.calendar;
-    console.log('✅ Fallback content loaded for:', viewName);
-  }, 1000);
 }
 
-// Export safe functions
-window.safeLoadView = safeLoadView;
-window.safeGetElement = safeGetElement;
-window.safeExecute = safeExecute;
-
-console.log('✅ Emergency error handling loaded');
-</script>
-
-<!-- เพิ่ม CSS สำหรับ loading และ error states -->
-<style>
-  .loading-placeholder {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    min-height: 400px;
-    background: var(--bg-secondary, #f8f9fa);
+/* ลบ session */
+function logoutUser(sessionToken) {
+  if (sessionToken) {
+    const prop = PropertiesService.getScriptProperties();
+    prop.deleteProperty(`session_${sessionToken}`);
   }
-
-  .loading-content {
-    text-align: center;
-    padding: 40px;
-  }
-
-  .loading-spinner {
-    width: 40px;
-    height: 40px;
-    border: 4px solid #f3f3f3;
-    border-top: 4px solid #1a73e8;
-    border-radius: 50%;
-    animation: spin 1s linear infinite;
-    margin: 0 auto 20px;
-  }
-
-  @keyframes spin {
-    0% {
-      transform: rotate(0deg);
-    }
-
-    100% {
-      transform: rotate(360deg);
-    }
-  }
-
-  .auth-container {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    min-height: 400px;
-    padding: 20px;
-  }
-
-  .auth-card {
-    background: white;
-    border-radius: 8px;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-    padding: 0;
-    width: 100%;
-    max-width: 400px;
-    overflow: hidden;
-  }
-
-  .auth-header {
-    padding: 20px;
-    border-bottom: 1px solid #eee;
-    text-align: center;
-  }
-
-  .calendar-container {
-    padding: 20px;
-  }
-
-  .calendar-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 20px;
-    flex-wrap: wrap;
-    gap: 10px;
-  }
-
-  .btn {
-    padding: 8px 16px;
-    background: #1a73e8;
-    color: white;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 14px;
-  }
-
-  .btn:hover {
-    background: #1557b0;
-  }
-</style>
-
-<script>
-  /* ========================================
-   MEETING ROOM BOOKING SYSTEM - JavaScript
-   ======================================== */
-
-// Global variables
-let calendar = null;
-let currentView = 'calendar';
-let isLoading = false;
-let userSessionData = null;
-let isAuthChecked = false;
-let currentUser = null;
-
-/* ========== AUTHENTICATION MANAGEMENT ========== */
-
-function submitLoginForm(event) {
-  event.preventDefault();
-
-  const email = document.getElementById('loginEmail').value.trim();
-  const password = document.getElementById('loginPassword').value;
-  const sessionToken = localStorage.getItem('booking_session_token');
-
-  google.script.run
-    .withSuccessHandler(function(result) {
-      console.log('✅ Login successful:', result);
-      
-      // ✅ เก็บ session token
-      if (result.sessionToken) {
-        localStorage.setItem('booking_session_token', result.sessionToken);
-      }
-      
-      currentUser = result;
-      isAuthChecked = true;
-      renderUserBox(result);
-      loadView('calendar');
-    })
-    .withFailureHandler(function(error) {
-      console.error('❌ Login error:', error.message);
-      Swal.fire('เข้าสู่ระบบไม่สำเร็จ', error.message, 'error');
-    })
-    .loginUser({ email, pwd: password });
-
+  return { success: true };
 }
 
+function cleanupExpiredSessions() {
+  try {
+    const prop = PropertiesService.getScriptProperties();
+    const allProperties = prop.getProperties();
+    const now = new Date();
+    let cleanedCount = 0;
 
-function checkAuthAndRenderUserBox() {
-  console.log('🔍 Checking authentication...');
-  
-  const sessionToken = localStorage.getItem('booking_session_token');
-
-  if (typeof google !== 'undefined' && google.script && google.script.run) {
-    google.script.run
-      .withSuccessHandler(function(user) {
-        console.log('✅ Auth check result:', user);
-        
-        // ✅ อัปเดต global variables
-        window.currentUser = user;
-        window.isAuthChecked = true;
-        window.authChecked = true;
-        
-        // Update legacy variables
-        if (typeof currentUser !== 'undefined') currentUser = user;
-        if (typeof isAuthChecked !== 'undefined') isAuthChecked = true;
-        if (typeof authChecked !== 'undefined') authChecked = true;
-        
-        renderUserBox(user);
-        console.log('👤 User status:', user ? `Logged in as ${user.name}` : 'Not logged in');
-        
-        // Trigger any pending auth checks
-        if (window.pendingNavigation) {
-          console.log('🔄 Processing pending navigation:', window.pendingNavigation);
-          checkAuthAndNavigate(window.pendingNavigation);
-          window.pendingNavigation = null;
-        }
-      })
-      .withFailureHandler(function(error) {
-        console.error('❌ Auth check failed:', error);
-        
-        // Set as checked but no user
-        window.currentUser = null;
-        window.isAuthChecked = true;
-        window.authChecked = true;
-        
-        if (typeof currentUser !== 'undefined') currentUser = null;
-        if (typeof isAuthChecked !== 'undefined') isAuthChecked = true;
-        if (typeof authChecked !== 'undefined') authChecked = true;
-        
-        renderUserBox(null);
-      })
-      .getSessionUser(sessionToken);
-  } else {
-    // Fallback for testing
-    console.log('⚠️ Google Apps Script not available');
-    window.currentUser = null;
-    window.isAuthChecked = true;
-    window.authChecked = true;
-    
-    if (typeof currentUser !== 'undefined') currentUser = null;
-    if (typeof isAuthChecked !== 'undefined') isAuthChecked = true;
-    if (typeof authChecked !== 'undefined') authChecked = true;
-    
-    renderUserBox(null);
-  }
-}
-
-function renderUserBox(user) {
-  const userInfoEl = document.getElementById("userInfo");
-  if (!userInfoEl) return;
-
-  if (user) {
-    userInfoEl.innerHTML = `
-      <div class="user-profile">
-        <div class="user-avatar">
-          <span class="avatar-icon">👤</span>
-        </div>
-        <div class="user-details">
-          <p class="user-name">${user.name}</p>
-          <p class="user-email">${user.email}</p>
-        </div>
-      </div>
-      <button class="logout-btn" onclick="logout()">
-        <span>🚪</span> ออกจากระบบ
-      </button>
-    `;
-  } else {
-    userInfoEl.innerHTML = `
-      <div class="auth-prompt">
-        <p class="auth-text">ยังไม่ได้เข้าสู่ระบบ</p>
-        <button class="login-btn" onclick="loadView('login')">
-          <span>🔑</span> เข้าสู่ระบบ
-        </button>
-      </div>
-    `;
-  }
-}
-
-function logout() {
-  const clearClientSession = () => {
-    // ✅ เคลียร์ทุกตัวแปร authentication ที่เกี่ยวข้อง
-    currentUser = null;
-    window.currentUser = null;
-    currUser = null;
-    isAuthChecked = false;
-    window.isAuthChecked = false;
-    authChecked = false;
-    window.authChecked = false;
-
-    // ✅ ลบ session จาก client storage
-    localStorage.removeItem('booking_session_token');
-
-    // ✅ อัปเดต UI
-    if (typeof renderUserBox === 'function') {
-      renderUserBox(null);
-    }
-  };
-  const sessionToken = localStorage.getItem('booking_session_token');
-  if (typeof google !== 'undefined' && google.script && google.script.run) {
-    google.script.run
-      .withSuccessHandler(function () {
-        clearClientSession();
-
-        if (typeof Swal !== 'undefined') {
-          Swal.fire({
-            icon: 'success',
-            title: 'ออกจากระบบแล้ว',
-            text: 'ขอบคุณที่ใช้บริการ',
-            timer: 1500,
-            showConfirmButton: false
-          });
-        }
-
-        // ✅ Redirect หลัง logout
-        setTimeout(() => {
-          if (typeof loadView === 'function') {
-            loadView('calendar');
-          } else {
-            location.reload();
+    Object.keys(allProperties).forEach(key => {
+      if (key.startsWith('session_')) {
+        try {
+          const sessionData = JSON.parse(allProperties[key]);
+          if (new Date(sessionData.expiry) < now) {
+            prop.deleteProperty(key);
+            cleanedCount++;
           }
-        }, 1000);
-      })
-      .withFailureHandler(function (error) {
-        console.error('Logout failed:', error);
-        if (typeof Swal !== 'undefined') {
-          Swal.fire({
-            icon: 'error',
-            title: 'เกิดข้อผิดพลาด',
-            text: 'ไม่สามารถออกจากระบบได้'
-          });
+        } catch (e) {
+          // ลบ session ที่ corrupt
+          prop.deleteProperty(key);
+          cleanedCount++;
         }
-      })
-      .logoutUser(sessionToken);
-  } else {
-    // ✅ fallback (local mode / dev mode)
-    clearClientSession();
-    if (typeof loadView === 'function') {
-      loadView('calendar');
-    } else {
-      location.reload();
-    }
-  }
-}
-
-
-function checkAuthAndNavigate(viewName) {
-  // ใช้ session ที่ดึงมาก่อนหน้า (เช่นจาก renderUserBox)
-  const sessionToken = localStorage.getItem('booking_session_token');
-  if (window.currentUser) {
-    loadView(viewName);
-    return;
-  }
-
-  // fallback: ดึง session แบบ async ถ้าไม่เคย login
-  google.script.run.withSuccessHandler(user => {
-    if (user) {
-      window.currentUser = user;
-      loadView(viewName);
-    } else {
-      Swal.fire({
-        icon: 'info',
-        title: 'จำเป็นต้องเข้าสู่ระบบ',
-        text: 'กรุณาเข้าสู่ระบบเพื่อทำการจองห้องประชุม',
-        showCancelButton: true,
-        confirmButtonText: 'เข้าสู่ระบบ',
-        cancelButtonText: 'ยกเลิก'
-      }).then(result => {
-        if (result.isConfirmed) {
-          loadView('login');
-        }
-      });
-    }
-  }).getSessionUser(sessionToken);
-}
-
-
-/* ========== CALENDAR MANAGEMENT ========== */
-
-function renderCalendar(events = []) {
-  const calendarEl = document.getElementById('calendar');
-  if (!calendarEl) {
-    console.warn('Calendar element not found');
-    return;
-  }
-
-  // Destroy existing calendar if it exists
-  if (calendar) {
-    calendar.destroy();
-    calendar = null;
-  }
-
-  // Create new calendar instance
-  calendar = new FullCalendar.Calendar(calendarEl, {
-    // Basic configuration
-    initialView: 'dayGridMonth',
-    height: '100%',
-    locale: 'th',
-    firstDay: 0, // Sunday
-    
-    // Time format
-    eventTimeFormat: {
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false
-    },
-    
-    // Header toolbar configuration
-    headerToolbar: {
-      left: 'prev,next today',
-      center: 'title',
-      right: 'dayGridMonth,timeGridWeek,timeGridDay,listWeek'
-    },
-    
-    // Button text localization
-    buttonText: {
-      today: 'วันนี้',
-      month: 'เดือน',
-      week: 'สัปดาห์',
-      day: 'วัน',
-      list: 'รายการ'
-    },
-    
-    // Events configuration
-    events: events || [],
-    eventDisplay: 'block',
-    dayMaxEvents: 3,
-    moreLinkClick: 'popover',
-    
-    // Event interactions
-    eventClick: function(info) {
-      showEventDetails(info.event);
-    },
-    
-    dateClick: function(info) {
-      // Quick booking: check auth first
-      if (!isAuthChecked) {
-        setTimeout(() => calendar.getApi().trigger('dateClick', info), 200);
-        return;
-      }
-      
-      if (currentUser) {
-        // Pre-fill form with selected date
-        const selectedDate = info.dateStr;
-        localStorage.setItem('selectedDate', selectedDate);
-        loadView('form');
-      } else {
-        checkAuthAndNavigate('form');
-      }
-    },
-    
-    // Event styling
-    eventDidMount: function(info) {
-      info.el.setAttribute('title', `${info.event.title}\nคลิกเพื่อดูรายละเอียด`);
-    },
-    
-    // Loading states
-    loading: function(isLoading) {
-      toggleLoadingState(isLoading);
-    },
-    
-    // View change handling
-    datesSet: function(info) {
-      currentView = info.view.type;
-    }
-  });
-
-  // Render the calendar
-  calendar.render();
-  
-  console.log(`📅 Calendar rendered with ${events.length} events`);
-}
-
-function showEventDetails(event) {
-  const props = event.extendedProps || {};
-  const startTime = event.start ? event.start.toLocaleTimeString('th-TH', {
-    hour: '2-digit', 
-    minute: '2-digit'
-  }) : 'ไม่ระบุ';
-  const endTime = event.end ? event.end.toLocaleTimeString('th-TH', {
-    hour: '2-digit', 
-    minute: '2-digit'
-  }) : 'ไม่ระบุ';
-
-  const eventDate = event.start ? event.start.toLocaleDateString('th-TH', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric'
-  }) : 'ไม่ระบุ';
-
-  if (typeof Swal !== 'undefined') {
-    Swal.fire({
-      title: '📋 รายละเอียดการจอง',
-      html: `
-        <div style="text-align: left; margin: 16px 0; line-height: 1.6;">
-          <div style="background: var(--bg-secondary); padding: 16px; border-radius: 8px; margin-bottom: 16px;">
-            // <h4 style="margin: 0 0 8px 0; color: var(--text-color);">${event.title}</h4>
-            <p style="margin: 4px 0; color: var(--text-secondary);"><strong>📅 วันที่:</strong> ${eventDate}</p>
-            <p style="margin: 4px 0; color: var(--text-secondary);"><strong>⏰ เวลา:</strong> ${startTime} - ${endTime}</p>
-          </div>
-          <p style="margin: 8px 0;"><strong>👤 ผู้จอง:</strong> ${props.booker || 'ไม่ระบุ'}</p>
-          <p style="margin: 8px 0;"><strong>🏢 ฝ่าย:</strong> ${props.department || 'ไม่ระบุ'}</p>
-          <p style="margin: 8px 0;"><strong>🏛️ บริษัท:</strong> ${props.company || 'ไม่ระบุ'}</p>
-          <p style="margin: 8px 0;"><strong>🎯 วัตถุประสงค์:</strong> ${props.purpose || 'ไม่ระบุ'}</p>
-          <p style="margin: 8px 0;"><strong>📧 อีเมล:</strong> ${props.email || 'ไม่ระบุ'}</p>
-          <p style="margin: 8px 0;"><strong>📊 สถานะ:</strong> ${props.status || 'ปกติ'}</p>
-        </div>
-      `,
-      showCancelButton: true,
-      confirmButtonText: '✏️ แก้ไข',
-      cancelButtonText: '❌ ปิด',
-      confirmButtonColor: '#1a73e8',
-      cancelButtonColor: '#6c757d',
-      width: '500px'
-    }).then((result) => {
-      if (result.isConfirmed) {
-        // TODO: Implement edit functionality
-        editBooking(event.id, props);
       }
     });
+
+    console.log(`✅ Cleaned ${cleanedCount} expired sessions`);
+    return { cleanedCount };
+  } catch (err) {
+    console.error('❌ Cleanup sessions error:', err);
+    return { cleanedCount: 0 };
   }
 }
 
-function refreshCalendarData() {
-  if (typeof google !== 'undefined' && google.script && google.script.run) {
-    toggleLoadingState(true);
-    
-    google.script.run
-      .withSuccessHandler(function(events) {
-        renderCalendar(events);
-        toggleLoadingState(false);
-        
-        if (typeof Swal !== 'undefined') {
-          Swal.fire({
-            icon: 'success',
-            title: 'รีเฟรชสำเร็จ',
-            text: `อัปเดตข้อมูลแล้ว ${events.length} รายการ`,
-            timer: 1500,
-            showConfirmButton: false
-          });
-        }
-      })
-      .withFailureHandler(function(error) {
-        console.error('Calendar refresh failed:', error);
-        toggleLoadingState(false);
-        
-        if (typeof Swal !== 'undefined') {
-          Swal.fire({
-            icon: 'error',
-            title: 'เกิดข้อผิดพลาด',
-            text: 'ไม่สามารถรีเฟรชข้อมูลได้'
-          });
-        }
-      })
-      .listEvents();
-  }
-}
+// ===== 4. เพิ่ม function สำหรับ clean up duplicate emails =====
+function cleanupDuplicateEmails() {
+  try {
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Users');
+    const data = sheet.getDataRange().getValues();
 
-/* ========== FORM MANAGEMENT ========== */
+    const emails = new Set();
+    const rowsToDelete = [];
 
-function handleSubmit(event) {
-  event.preventDefault();
-  
-  const form = event.target;
-  const submitBtn = form.querySelector('button[type="submit"]');
-  const originalText = submitBtn.innerHTML;
-  
-  // Disable submit button and show loading
-  submitBtn.disabled = true;
-  submitBtn.innerHTML = '⏳ กำลังบันทึก...';
+    // เริ่มจาก row 2 (skip header)
+    for (let i = 1; i < data.length; i++) {
+      const email = data[i][3]; // Column D
 
-  // Collect form data
-  const formData = new FormData(form);
-  const bookingData = {
-    date: formData.get('date'),
-    start: formData.get('start'),
-    end: formData.get('end'),
-    name: formData.get('name'),
-    department: formData.get('department'),
-    company: formData.get('company'),
-    purpose: formData.get('purpose'),
-    email: formData.get('email')
-  };
-
-  // Client-side validation
-  if (!validateBookingData(bookingData)) {
-    submitBtn.disabled = false;
-    submitBtn.innerHTML = originalText;
-    return;
-  }
-
-  // Submit to server
-  if (typeof google !== 'undefined' && google.script && google.script.run) {
-    google.script.run
-      .withSuccessHandler(function(result) {
-        submitBtn.disabled = false;
-        submitBtn.innerHTML = originalText;
-        
-        if (result.status === 'ok') {
-          if (typeof Swal !== 'undefined') {
-            Swal.fire({
-              icon: 'success',
-              title: 'จองสำเร็จ! 🎉',
-              text: 'ระบบได้บันทึกการจองเรียบร้อยแล้ว',
-              timer: 2000,
-              showConfirmButton: false
-            }).then(() => {
-              form.reset();
-              loadView('calendar', true);
-            });
-          } else {
-            alert('จองสำเร็จ!');
-            form.reset();
-            loadView('calendar', true);
-          }
-        }
-      })
-      .withFailureHandler(function(error) {
-        submitBtn.disabled = false;
-        submitBtn.innerHTML = originalText;
-        
-        if (typeof Swal !== 'undefined') {
-          Swal.fire({
-            icon: 'error',
-            title: 'เกิดข้อผิดพลาด',
-            text: error.message || 'ไม่สามารถบันทึกการจองได้'
-          });
-        } else {
-          alert('เกิดข้อผิดพลาด: ' + (error.message || 'ไม่สามารถบันทึกการจองได้'));
-        }
-      })
-      .submitBooking(bookingData);
-  } else {
-    // Fallback for testing
-    setTimeout(() => {
-      submitBtn.disabled = false;
-      submitBtn.innerHTML = originalText;
-      
-      if (typeof Swal !== 'undefined') {
-        Swal.fire({
-          icon: 'info',
-          title: 'โหมดทดสอบ',
-          text: 'การจองจะถูกบันทึกเมื่อเชื่อมต่อกับ Google Apps Script'
-        });
+      if (emails.has(email)) {
+        rowsToDelete.push(i + 1); // Sheet rows are 1-indexed
       } else {
-        alert('โหมดทดสอบ: การจองจะถูกบันทึกเมื่อเชื่อมต่อกับ Google Apps Script');
+        emails.add(email);
       }
-    }, 1000);
-  }
-}
-
-function validateBookingData(data) {
-  // Check required fields
-  if (!data.date || !data.start || !data.end || !data.name) {
-    if (typeof Swal !== 'undefined') {
-      Swal.fire({
-        icon: 'warning',
-        title: 'ข้อมูลไม่ครบถ้วน',
-        text: 'กรุณากรอกข้อมูลที่จำเป็นให้ครบถ้วน'
-      });
-    } else {
-      alert('กรุณากรอกข้อมูลที่จำเป็นให้ครบถ้วน');
     }
-    return false;
-  }
 
-  // Validate time range
-  if (data.start >= data.end) {
-    if (typeof Swal !== 'undefined') {
-      Swal.fire({
-        icon: 'warning',
-        title: 'เวลาไม่ถูกต้อง',
-        text: 'เวลาเริ่มต้องมาก่อนเวลาสิ้นสุด'
-      });
-    } else {
-      alert('เวลาเริ่มต้องมาก่อนเวลาสิ้นสุด');
-    }
-    return false;
-  }
-
-  // Check if booking date is in the past
-  const bookingDate = new Date(data.date);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  
-  if (bookingDate < today) {
-    if (typeof Swal !== 'undefined') {
-      Swal.fire({
-        icon: 'warning',
-        title: 'วันที่ไม่ถูกต้อง',
-        text: 'ไม่สามารถจองย้อนหลังได้'
-      });
-    } else {
-      alert('ไม่สามารถจองย้อนหลังได้');
-    }
-    return false;
-  }
-
-  // Validate email format if provided
-  if (data.email && !isValidEmail(data.email)) {
-    if (typeof Swal !== 'undefined') {
-      Swal.fire({
-        icon: 'warning',
-        title: 'รูปแบบอีเมลไม่ถูกต้อง',
-        text: 'กรุณากรอกอีเมลในรูปแบบที่ถูกต้อง'
-      });
-    } else {
-      alert('กรุณากรอกอีเมลในรูปแบบที่ถูกต้อง');
-    }
-    return false;
-  }
-
-  return true;
-}
-
-function isValidEmail(email) {
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  return emailRegex.test(email);
-}
-
-/* ========== VIEW MANAGEMENT ========== */
-const viewMap = {
-  calendar: 'CalendarView',
-  form: 'Form',
-  list: 'TodayList',
-  login: 'Login',
-  register: 'Register',
-  forgot: 'ForgotPassword',
-  calendarlist: 'CalendarList'
-};
-
-function loadView(viewName, forceRefresh = false) {
-  if (isLoading && !forceRefresh) return;
-  
-  const mainContent = document.getElementById('mainContent');
-  if (!mainContent) return;
-
-  // Update navigation active state
-  setActiveNav(viewName);
-  
-  // Show loading state
-  if (!forceRefresh) {
-    mainContent.innerHTML = `
-      <div class="loading-placeholder">
-        <div class="loading-content">
-          <div class="loading-spinner"></div>
-          <h3>🔄 กำลังโหลด...</h3>
-          <p>กรุณารอสักครู่</p>
-        </div>
-      </div>
-    `;
-  }
-
-  const templateName = viewMap[viewName] || 'CalendarView';
-  
-  if (typeof google !== 'undefined' && google.script && google.script.run) {
-    isLoading = true;
-    
-    google.script.run
-      .withSuccessHandler(function(html) {
-        console.log("✅ Loaded view HTML:", html);
-        mainContent.innerHTML = html;
-        isLoading = false;
-        
-        // Post-load actions based on view
-        handleViewLoaded(viewName);
-      })
-      .withFailureHandler(function(error) {
-        console.error('Failed to load view:', error);
-        mainContent.innerHTML = `
-          <div class="error-container">
-            <div class="error-content">
-              <h3>⚠️ เกิดข้อผิดพลาด</h3>
-              <p>ไม่สามารถโหลดหน้านี้ได้ กรุณาลองใหม่อีกครั้ง</p>
-              <button onclick="loadView('${viewName}')" class="retry-btn">
-                🔄 ลองใหม่
-              </button>
-            </div>
-          </div>
-        `;
-        isLoading = false;
-      })
-      .include(templateName);
-  } else {
-    // Fallback content for testing
-    mainContent.innerHTML = getFallbackContent(viewName);
-    handleViewLoaded(viewName);
-  }
-}
-
-function handleViewLoaded(viewName) {
-  switch (viewName) {
-    case 'calendar':
-      setTimeout(() => {
-        if (typeof google !== 'undefined' && google.script && google.script.run) {
-          google.script.run
-            .withSuccessHandler(renderCalendar)
-            .withFailureHandler(function(error) {
-              console.error('Failed to load events:', error);
-              renderCalendar([]); // Render empty calendar
-            })
-            .listEvents();
-        } else {
-          renderCalendar(getSampleEvents());
-        }
-      }, 100);
-      break;
-      
-    case 'form':
-      setupFormDefaults();
-      break;
-      
-    case 'list':
-      loadBookingList();
-      break;
-
-    case 'login':
-      initLoginForm();
-      break;
-      
-    case 'register':
-      initRegisterForm();
-      break;
-
-    case 'forgot':
-      initForgotPassword();  // ✅ ตรงนี้คือสิ่งที่สำคัญ
-      break;
-  }
-
-  // Sync theme toggle in header if exists
-  const headerToggle = document.getElementById('themeToggleHeader');
-  if (headerToggle) {
-    const savedTheme = localStorage.getItem("booking-theme") || "light";
-    headerToggle.checked = savedTheme === "dark";
-  }
-}
-
-function initLoginForm() {
-  // Login form will be handled by emergency fix scripts
-  console.log('Login form initialized');
-}
-
-function initRegisterForm() {
-  // Register form will be handled by emergency fix scripts  
-  console.log('Register form initialized');
-}
-
-function setupFormDefaults() {
-  // Set default date to today or selected date
-  const today = new Date().toISOString().split('T')[0];
-  const selectedDate = localStorage.getItem('selectedDate') || today;
-  
-  const dateInput = document.getElementById('date');
-  if (dateInput) {
-    dateInput.value = selectedDate;
-    dateInput.setAttribute('min', today); // Prevent past dates
-  }
-  
-  // Clear selected date from localStorage
-  localStorage.removeItem('selectedDate');
-
-  // Set default time range (9:00 AM - 10:00 AM)
-  const startInput = document.getElementById('start');
-  const endInput = document.getElementById('end');
-  if (startInput && !startInput.value) {
-    startInput.value = '09:00';
-  }
-  if (endInput && !endInput.value) {
-    endInput.value = '10:00';
-  }
-}
-
-function loadBookingList() {
-  // TODO: Implement booking list functionality
-  const listContainer = document.getElementById('booking-list');
-  if (listContainer) {
-    listContainer.innerHTML = `
-      <div class="text-center" style="padding: 40px; color: var(--text-secondary);">
-        <h3>📋 รายการจองทั้งหมด</h3>
-        <p>ฟีเจอร์นี้อยู่ระหว่างการพัฒนา</p>
-      </div>
-    `;
-  }
-}
-
-function setActiveNav(viewName) {
-  // Remove active class from all nav items
-  document.querySelectorAll('.nav-menu a').forEach(link => {
-    link.classList.remove('active');
-  });
-  
-  // Add active class to current nav item
-  const activeNav = document.getElementById(`nav-${viewName}`);
-  if (activeNav) {
-    activeNav.classList.add('active');
-  }
-  
-  console.log('📍 Navigation set to:', viewName);
-}
-
-/* ========== UTILITY FUNCTIONS ========== */
-
-function toggleLoadingState(loading) {
-  const calendarEl = document.getElementById('calendar');
-  if (!calendarEl) return;
-  
-  if (loading) {
-    calendarEl.style.opacity = '0.6';
-    calendarEl.style.pointerEvents = 'none';
-  } else {
-    calendarEl.style.opacity = '1';
-    calendarEl.style.pointerEvents = 'auto';
-  }
-}
-
-function editBooking(eventId, eventData) {
-  // TODO: Implement edit booking functionality
-  if (typeof Swal !== 'undefined') {
-    Swal.fire({
-      icon: 'info',
-      title: 'ฟีเจอร์การแก้ไข',
-      text: 'ฟีเจอร์การแก้ไขการจองอยู่ระหว่างการพัฒนา'
+    // ลบ rows ที่ซ้ำ (เริ่มจากล่างขึ้นบน)
+    rowsToDelete.reverse().forEach(rowNum => {
+      sheet.deleteRow(rowNum);
+      console.log('🗑️ Deleted duplicate row:', rowNum);
     });
-  } else {
-    alert('ฟีเจอร์การแก้ไขการจองอยู่ระหว่างการพัฒนา');
+
+    console.log(`✅ Cleanup complete. Removed ${rowsToDelete.length} duplicate rows.`);
+    return { removedRows: rowsToDelete.length };
+
+  } catch (err) {
+    console.error('❌ Cleanup error:', err);
+    throw new Error('เกิดข้อผิดพลาดในการทำความสะอาดข้อมูล');
   }
 }
 
-function getFallbackContent(viewName) {
-  const fallbackContents = {
-    calendar: `
-      <div class="calendar-container">
-        <div class="calendar-header">
-          <h4>📅 ปฏิทินการใช้ห้องประชุม</h4>
-          <div class="calendar-actions">
-            <button class="refresh-btn" onclick="refreshCalendarData()">🔄 รีเฟรช</button>
-            <button class="add-btn" onclick="checkAuthAndNavigate('form')">➕ จองใหม่</button>
-          </div>
-        </div>
-        <div id="calendar"></div>
-      </div>
-    `,
-    form: `
-      <div class="form-container">
-        <div class="form-header">
-          <h3>📝 แบบฟอร์มจองห้องประชุม</h3>
-          <p>กรุณาเชื่อมต่อกับ Google Apps Script เพื่อใช้งานฟอร์ม</p>
-        </div>
-      </div>
-    `,
-    list: `
-      <div class="text-center" style="padding: 40px; color: var(--text-secondary);">
-        <h3>📋 รายการจองทั้งหมด</h3>
-        <p>กรุณาเชื่อมต่อกับ Google Apps Script เพื่อดูรายการจอง</p>
-      </div>
-    `,
-    login: `
-      <div class="text-center" style="padding: 40px; color: var(--text-secondary);">
-        <h3>🔑 เข้าสู่ระบบ</h3>
-        <p>กรุณาเชื่อมต่อกับ Google Apps Script เพื่อใช้งานระบบ</p>
-      </div>
-    `,
-    register: `
-      <div class="text-center" style="padding: 40px; color: var(--text-secondary);">
-        <h3>📝 สมัครสมาชิก</h3>
-        <p>กรุณาเชื่อมต่อกับ Google Apps Script เพื่อใช้งานระบบ</p>
-      </div>
-    `
+function resetPassword(data) {
+  try {
+    console.log('🔐 Reset password attempt for:', data.email);
+    
+    if (!data || !data.email || !data.password) {
+      throw new Error('กรุณากรอกอีเมลและรหัสผ่านให้ครบถ้วน');
+    }
+    
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Users');
+    if (!sheet) {
+      throw new Error('ไม่พบ Users sheet');
+    }
+    
+    // หาผู้ใช้จาก email
+    const user = findUser(data.email);
+    if (!user) {
+      throw new Error('ไม่พบอีเมลนี้ในระบบ');
+    }
+    
+    console.log('👤 User found:', user.name);
+    
+    // Hash รหัสผ่านใหม่
+    const newHash = hash(data.password);
+    if (!newHash) {
+      throw new Error('เกิดข้อผิดพลาดในการเข้ารหัสรหัสผ่าน');
+    }
+    
+    // อัปเดตรหัสผ่านในแถวที่พบ
+    sheet.getRange(user.row, 5).setValue(newHash); // Column E (password hash)
+    
+    console.log('✅ Password updated successfully for:', data.email);
+    
+    return {
+      status: 'success',
+      message: 'เปลี่ยนรหัสผ่านสำเร็จ'
+    };
+    
+  } catch (err) {
+    console.error('❌ Reset password error:', err);
+    throw new Error(err.message || 'เกิดข้อผิดพลาดในการเปลี่ยนรหัสผ่าน');
+  }
+}
+
+
+/* ---------- DEV TEST ---------- */
+// ใน Apps Script Editor, รันฟังก์ชันนี้
+function testResetPassword() {
+  try {
+    const result = resetPassword({
+      email: 'jom.trwkm@gmail.com', // เปลี่ยนเป็น email ที่มีในระบบ
+      password: 'newpassword123'
+    });
+    console.log('✅ Test result:', result);
+  } catch (err) {
+    console.error('❌ Test failed:', err);
+  }
+}
+function testListEvents() {
+  const ev = listEvents();
+  Logger.log(`👉 events=${ev.length}`);
+  Logger.log(JSON.stringify(ev.slice(0, 3), null, 2));
+}
+
+// เพิ่ม debug function
+function testRegister() {
+  const testData = {
+    name: 'ทดสอบ ระบบ',
+    nickname: 'ทดสอบ',
+    email: 'test@example.com',
+    password: '123456',
+    phone: '0812345678'
   };
-  
-  return fallbackContents[viewName] || fallbackContents.calendar;
-}
 
-function getSampleEvents() {
-  const today = new Date();
-  return [
-    {
-      id: 'sample-1',
-      title: 'ประชุมทีม IT',
-      start: new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1, 9, 0),
-      end: new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1, 11, 0),
-      backgroundColor: '#1a73e8',
-      extendedProps: {
-        booker: 'สมชาย ใจดี',
-        department: 'ฝ่ายไอที',
-        company: 'บริษัท ABC',
-        purpose: 'ประชุมประจำสัปดาห์',
-        email: 'somchai@abc.com'
-      }
-    },
-    {
-      id: 'sample-2',
-      title: 'อบรมพนักงานใหม่',
-      start: new Date(today.getFullYear(), today.getMonth(), today.getDate() + 2, 13, 0),
-      end: new Date(today.getFullYear(), today.getMonth(), today.getDate() + 2, 16, 0),
-      backgroundColor: '#34a853',
-      extendedProps: {
-        booker: 'สุดา นักอบรม',
-        department: 'ฝ่าย HR',
-        company: 'บริษัท ABC',
-        purpose: 'อบรมพนักงานใหม่',
-        email: 'suda@abc.com'
-      }
-    }
-  ];
-}
-
-/* ========== REFRESH CALENDAR ========== */
-
-function refreshCalendar() {
-  console.log('🔄 Refreshing calendar from server...');
-  
-  if (typeof google !== 'undefined' && google.script && google.script.run) {
-    const refreshBtn = document.querySelector('.refresh-btn');
-    if (refreshBtn) {
-      const originalText = refreshBtn.innerHTML;
-      refreshBtn.innerHTML = '⏳ กำลังโหลด...';
-      refreshBtn.disabled = true;
-      
-      google.script.run
-        .withSuccessHandler(function(events) {
-          if (typeof renderCalendar === 'function') {
-            renderCalendar(events);
-          }
-          
-          // Reset button
-          refreshBtn.innerHTML = originalText;
-          refreshBtn.disabled = false;
-          
-          if (typeof Swal !== 'undefined') {
-            Swal.fire({
-              icon: 'success',
-              title: 'รีเฟรชสำเร็จ',
-              text: 'ข้อมูลปฏิทินได้รับการอัปเดตแล้ว',
-              timer: 1500,
-              showConfirmButton: false
-            });
-          }
-          
-          console.log('✅ Calendar refreshed successfully');
-        })
-        .withFailureHandler(function(error) {
-          console.error('❌ Failed to refresh calendar:', error);
-          
-          // Reset button
-          refreshBtn.innerHTML = originalText;
-          refreshBtn.disabled = false;
-          
-          if (typeof Swal !== 'undefined') {
-            Swal.fire({
-              icon: 'error',
-              title: 'เกิดข้อผิดพลาด',
-              text: 'ไม่สามารถรีเฟรชข้อมูลได้ กรุณาลองใหม่อีกครั้ง'
-            });
-          }
-        })
-        .listEvents();
-    }
-  } else {
-    console.error('❌ Google Apps Script not available');
+  try {
+    const result = registerUser(testData);
+    console.log('✅ Test register result:', result);
+  } catch (err) {
+    console.error('❌ Test register error:', err);
   }
 }
 
-/* ========== INITIALIZATION ========== */
+// เพิ่ม debug function สำหรับ login
+function testLogin() {
+  try {
+    const result = loginUser({
+      email: 'test@example.com',
+      pwd: '123456'
+    });
+    console.log('✅ Test login result:', result);
+  } catch (err) {
+    console.error('❌ Test login error:', err);
+  }
+}
 
-// Initialize when DOM is ready
-document.addEventListener('DOMContentLoaded', function() {
-  console.log('🚀 Meeting Room Booking System - JavaScript loaded');
-  
-  // Set up global error handling
-  window.addEventListener('error', function(e) {
-    console.error('💥 Global error:', e.error);
+function testFindUser() {
+  const testEmails = ['test@example.com', 'theerawat.it@waterpog.com'];
+
+  testEmails.forEach(email => {
+    try {
+      const user = findUser(email);
+      console.log(`Email "${email}" ->`, user ? `Found: ${user.name}` : 'Not found');
+    } catch (err) {
+      console.error(`FindUser failed for "${email}":`, err);
+    }
   });
-  
-  // Initialize theme
-  const savedTheme = localStorage.getItem("booking-theme") || "light";
-  document.documentElement.setAttribute("data-theme", savedTheme);
-  
-  // Check authentication
-  checkAuthAndRenderUserBox();
-});
+}
 
-// Export functions for global access
-window.renderCalendar = renderCalendar;
-window.handleSubmit = handleSubmit;
-window.loadView = loadView;
-window.refreshCalendarData = refreshCalendarData;
-window.refreshCalendar = refreshCalendar;
-window.checkAuthAndNavigate = checkAuthAndNavigate;
-window.renderUserBox = renderUserBox;
-window.logout = logout;
-window.currentUser = currentUser;
-window.isAuthChecked = isAuthChecked;
+function debugSheet() {
+  try {
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Users');
+    const data = sheet.getDataRange().getValues();
 
-// Save Login
-function handleLogin(event) {
-  event.preventDefault();
+    console.log('📊 Sheet debug:');
+    console.log('Total rows:', data.length);
+    console.log('Headers:', data[0]);
 
-  const email = document.getElementById('login-email').value.trim();
-  const password = document.getElementById('login-password').value.trim();
+    for (let i = 1; i < Math.min(data.length, 5); i++) {
+      console.log(`Row ${i}:`, data[i]);
+    }
+
+  } catch (err) {
+    console.error('❌ Sheet debug error:', err);
+  }
+}
+
+// ทดสอบ login กับข้อมูลที่มีอยู่
+function testExistingLogin() {
+  try {
+    // ใช้ข้อมูลจาก sheet
+    const result = loginUser({
+      email: 'test@example.com',
+      pwd: '123456'  // password ที่ใช้ตอน register
+    });
+    console.log('✅ Existing login test result:', result);
+  } catch (err) {
+    console.error('❌ Existing login test failed:', err);
+  }
+}
+
+function testFrontendInput(email, password) {
+  console.log('🧪 Testing frontend input:');
+  console.log('Email:', email, '(type:', typeof email, ')');
+  console.log('Password:', password, '(type:', typeof password, ')');
+  console.log('Email empty?', !email);
+  console.log('Password empty?', !password);
 
   if (!email || !password) {
-    Swal.fire('กรุณากรอกอีเมลและรหัสผ่านให้ครบถ้วน');
-    return;
+    console.log('❌ Input validation failed');
+    return { error: 'Invalid input' };
   }
 
-  google.script.run
-    .withSuccessHandler(function(user) {
-      if (user) {
-        // ✅ พบผู้ใช้
-        currentUser = {
-          email: user.email,
-          name: user.name,
-          role: user.role
-        };
-        isAuthChecked = true;
-        renderUserBox(currentUser);
-        loadView('calendar');
-
-        Swal.fire({
-          icon: 'success',
-          title: 'เข้าสู่ระบบสำเร็จ',
-          timer: 1500,
-          showConfirmButton: false
-        });
-      } else {
-        Swal.fire('เข้าสู่ระบบไม่สำเร็จ', 'อีเมลหรือรหัสผ่านไม่ถูกต้อง', 'error');
-      }
-    })
-    .withFailureHandler(function(error) {
-      console.error('Login error:', error);
-      Swal.fire('เกิดข้อผิดพลาด', 'ไม่สามารถเข้าสู่ระบบได้', 'error');
-    })
-    .loginWithEmailPassword(email, password); // เรียก Apps Script backend
-}
-
-document.getElementById("registerForm").addEventListener("submit", function (e) {
-  e.preventDefault();
-
-  const btn = document.getElementById("registerBtn");
-  btn.disabled = true;
-  btn.innerText = "กำลังสมัคร...";
-
-  const name = e.target.name.value.trim();
-  const email = e.target.email.value.trim();
-  const pwd = e.target.pwd.value.trim();
-  const repwd = e.target.repwd.value.trim();
-
-  if (!name || !email || !pwd || !repwd) {
-    Swal.fire("กรุณากรอกข้อมูลให้ครบถ้วน", "", "warning");
-    btn.disabled = false;
-    btn.innerText = "สร้างบัญชี";
-    return;
-  }
-
-  if (pwd !== repwd) {
-    Swal.fire("รหัสผ่านไม่ตรงกัน", "", "error");
-    btn.disabled = false;
-    btn.innerText = "สร้างบัญชี";
-    return;
-  }
-
-  const user = { name, email, pwd };
-
-  google.script.run
-    .withSuccessHandler(function (res) {
-      Swal.fire({
-        icon: "success",
-        title: "สมัครสมาชิกสำเร็จ",
-        text: "เข้าสู่ระบบแล้ว",
-        timer: 1500,
-        showConfirmButton: false
-      });
-      setTimeout(() => loadView("login"), 1500);
-    })
-    .withFailureHandler(function (err) {
-      Swal.fire({
-        icon: "error",
-        title: "เกิดข้อผิดพลาด",
-        text: err.message || "ไม่สามารถสมัครได้"
-      });
-      btn.disabled = false;
-      btn.innerText = "สร้างบัญชี";
-    })
-    .registerUser(user);
-});
-
-// 1. แก้ไข checkAuthAndNavigate function ใน JavaScript.html
-function checkAuthAndNavigate(viewName) {
-  console.log('🔍 checkAuthAndNavigate called for:', viewName);
-  console.log('🔍 Current auth state:', {
-    currentUser: window.currentUser,
-    isAuthChecked: window.isAuthChecked || isAuthChecked,
-    authChecked: window.authChecked
-  });
-
-  // ใช้ global variable ที่ถูกต้อง
-  const user = window.currentUser || currentUser;
-  const checked = window.isAuthChecked || isAuthChecked || window.authChecked || authChecked;
-
-  if (!checked) {
-    console.log('⏳ Auth not checked yet, waiting...');
-    // รอให้ auth check เสร็จก่อน
-    setTimeout(() => checkAuthAndNavigate(viewName), 300);
-    return;
-  }
-
-  if (user && user.email) {
-    console.log('✅ User authenticated, proceeding to:', viewName);
-    // User is logged in, proceed to view
-    loadView(viewName);
-  } else {
-    console.log('❌ User not authenticated, showing login prompt');
-    // User not logged in, show login prompt
-    if (typeof Swal !== 'undefined') {
-      Swal.fire({
-        icon: 'info',
-        title: 'จำเป็นต้องเข้าสู่ระบบ',
-        text: 'กรุณาเข้าสู่ระบบเพื่อทำการจองห้องประชุม',
-        showCancelButton: true,
-        confirmButtonText: 'เข้าสู่ระบบ',
-        cancelButtonText: 'ยกเลิก',
-        confirmButtonColor: '#1a73e8',
-        cancelButtonColor: '#6c757d'
-      }).then((result) => {
-        if (result.isConfirmed) {
-          loadView('login');
-        }
-      });
-    } else {
-      // Fallback without SweetAlert
-      if (confirm('กรุณาเข้าสู่ระบบเพื่อทำการจองห้องประชุม')) {
-        loadView('login');
-      }
-    }
+  try {
+    const result = loginUser({ email: email, pwd: password });
+    console.log('✅ Login test successful');
+    return result;
+  } catch (err) {
+    console.log('❌ Login test failed:', err.message);
+    return { error: err.message };
   }
 }
 
-
-</script>
-
-<script>
-  function initForgotPassword() {
-  const form = document.getElementById('forgotForm');
-  if (!form) return;
-
-  form.addEventListener('submit', function (e) {
-    e.preventDefault();
-
-    // ✅ ดึงค่าจาก id ตรง ๆ จะปลอดภัยกว่า
-    const email = document.getElementById("forgotEmail").value.trim();
-    const newPassword = document.getElementById("newPassword").value.trim();
-
-    if (!email || !newPassword) {
-      Swal.fire("กรุณากรอกข้อมูลให้ครบ", "", "warning");
-      return;
-    }
-
-    const payload = { email, password: newPassword };
-
-    console.log('🔐 Submitting resetPassword:', payload);
-
-    if (typeof google !== 'undefined' && google.script && google.script.run) {
-      google.script.run
-        .withSuccessHandler(function (res) {
-          console.log('✅ resetPassword response:', res);
-          Swal.fire("เปลี่ยนรหัสผ่านสำเร็จ", "", "success").then(() => {
-            loadView('login');
-          });
-        })
-        .withFailureHandler(function (err) {
-          console.error('❌ resetPassword error:', err);
-          Swal.fire("เกิดข้อผิดพลาด", err.message || "ไม่สามารถเปลี่ยนรหัสผ่านได้", "error");
-        })
-        .resetPassword(payload);  // ชื่อฟังก์ชันตรงกับ Code.gs แล้ว
-    }
-  });
-}
-</script>
-
-<script>
-  function handleResetClick() {
-  const email = document.getElementById("forgotEmail").value.trim();
-  const newPassword = document.getElementById("newPassword").value.trim();
-
-  if (!email || !newPassword) {
-    Swal.fire("กรุณากรอกข้อมูลให้ครบ", "", "warning");
-    return;
-  }
-
-  const payload = { email, password: newPassword };
-  console.log('🔐 Submitting resetPassword:', payload);
-
-  if (typeof google !== 'undefined' && google.script && google.script.run) {
-    google.script.run
-      .withSuccessHandler(function (res) {
-        console.log('✅ resetPassword response:', res);
-        Swal.fire("เปลี่ยนรหัสผ่านสำเร็จ", "", "success").then(() => {
-          loadView('login');
-        });
-      })
-      .withFailureHandler(function (err) {
-        console.error('❌ resetPassword error:', err);
-        Swal.fire("เกิดข้อผิดพลาด", err.message || "ไม่สามารถเปลี่ยนรหัสผ่านได้", "error");
-      })
-      .resetPassword(payload);
-  }
-}
-</script>
-
-
-
-
-<!-- ===== Emergency Frontend Fix - เพิ่มใน JavaScript.html ===== -->
-<script>
-  // 🚨 EMERGENCY FIX - Debug และแก้ไขปัญหา Frontend
-
-// 1. Override handleLoginSubmit function
-function handleLoginSubmit(event) {
-  event.preventDefault();
-  
-  console.log('🔑 Login form submitted (DEBUG VERSION)');
-  
-  const form = event.target;
-  const formData = new FormData(form);
-  
-  // Get values multiple ways to debug
-  const email1 = document.getElementById('loginEmail')?.value?.trim();
-  const password1 = document.getElementById('loginPassword')?.value?.trim();
-  const email2 = formData.get('email')?.trim?.();
-  const password2 = formData.get('pwd')?.trim?.();
-  
-  console.log('📧 Email methods:', {
-    getElementById: email1,
-    formData: email2,
-    types: {
-      email1: typeof email1,
-      email2: typeof email2
-    }
-  });
-  
-  console.log('🔑 Password methods:', {
-    getElementById: password1 ? '***' : 'empty',
-    formData: password2 ? '***' : 'empty',
-    lengths: {
-      password1: password1?.length || 0,
-      password2: password2?.length || 0
-    }
-  });
-  
-  // Use the most reliable values
-  const email = email1 || email2 || '';
-  const password = password1 || password2 || '';
-  
-  console.log('🎯 Final values:', {
-    email: email,
-    passwordProvided: !!password,
-    emailLength: email.length,
-    passwordLength: password.length
-  });
-  
-  // Validate
-  if (!email) {
-    alert('กรุณากรอกอีเมล');
-    console.log('❌ Email validation failed');
-    return;
-  }
-  
-  if (!password) {
-    alert('กรุณากรอกรหัสผ่าน');
-    console.log('❌ Password validation failed');
-    return;
-  }
-  
-  // Email format validation
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!emailRegex.test(email)) {
-    alert('รูปแบบอีเมลไม่ถูกต้อง');
-    console.log('❌ Email format validation failed');
-    return;
-  }
-  
-  const btn = document.getElementById('loginBtn');
-  if (btn) {
-    btn.disabled = true;
-    btn.innerHTML = '⏳ กำลังเข้าสู่ระบบ...';
-  }
-  
-  console.log('🚀 Calling Google Apps Script...');
-  
-  // Multiple call methods for debugging
-  if (typeof google !== 'undefined' && google.script && google.script.run) {
-    
-    // Method 1: loginUser with object
-    console.log('📞 Trying Method 1: loginUser({email, pwd})');
-    google.script.run
-      .withSuccessHandler(function(result) {
-        console.log('✅ Method 1 SUCCESS:', result);
-        handleLoginSuccess(result, btn);
-      })
-      .withFailureHandler(function(error) {
-        console.log('❌ Method 1 FAILED, trying Method 2...');
-        console.error('Method 1 error:', error);
-        
-        // Method 2: loginWithEmailPassword
-        console.log('📞 Trying Method 2: loginWithEmailPassword(email, password)');
-        google.script.run
-          .withSuccessHandler(function(result) {
-            console.log('✅ Method 2 SUCCESS:', result);
-            handleLoginSuccess(result, btn);
-          })
-          .withFailureHandler(function(error) {
-            console.log('❌ Method 2 FAILED, trying Method 3...');
-            console.error('Method 2 error:', error);
-            
-            // Method 3: testFrontendInput for debugging
-            console.log('📞 Trying Method 3: testFrontendInput for debugging');
-            google.script.run
-              .withSuccessHandler(function(result) {
-                console.log('✅ Method 3 (debug) result:', result);
-                if (result.error) {
-                  handleLoginError(result.error, btn);
-                } else {
-                  handleLoginSuccess(result, btn);
-                }
-              })
-              .withFailureHandler(function(error) {
-                console.log('❌ All methods failed');
-                console.error('Method 3 error:', error);
-                handleLoginError(error.message || 'เกิดข้อผิดพลาดในการเข้าสู่ระบบ', btn);
-              })
-              .testFrontendInput(email, password);
-          })
-          .loginWithEmailPassword(email, password);
-      })
-      .loginUser({email: email, pwd: password});
-      
-  } else {
-    console.log('⚠️ Google Apps Script not available');
-    if (btn) {
-      btn.disabled = false;
-      btn.innerHTML = 'เข้าสู่ระบบ';
-    }
-    alert('โหมดทดสอบ: เชื่อมต่อกับ Google Apps Script เพื่อใช้งานจริง');
-  }
-}
-
-function handleLoginSuccess(result, btn) {
-  console.log('🎉 Login successful!', result);
-  
-  if (btn) {
-    btn.disabled = false;
-    btn.innerHTML = 'เข้าสู่ระบบ';
-  }
-  
-  if (result && result.email) {
-    // ✅ สำคัญ: อัปเดต global variables ทั้งหมด
-    window.currentUser = result;
-    window.isAuthChecked = true;
-    window.authChecked = true;
-    
-    // Update legacy variables too
-    if (typeof currentUser !== 'undefined') currentUser = result;
-    if (typeof isAuthChecked !== 'undefined') isAuthChecked = true;
-    if (typeof authChecked !== 'undefined') authChecked = true;
-    
-    console.log('✅ Global auth state updated:', {
-      windowCurrentUser: window.currentUser,
-      windowIsAuthChecked: window.isAuthChecked,
-      windowAuthChecked: window.authChecked
-    });
-    
-    // Show success message
-    if (typeof Swal !== 'undefined') {
-      Swal.fire({
-        icon: 'success',
-        title: 'เข้าสู่ระบบสำเร็จ! 🎉',
-        text: `ยินดีต้อนรับ ${result.name}`,
-        timer: 2000,
-        showConfirmButton: false
-      });
-    } else {
-      alert(`เข้าสู่ระบบสำเร็จ! ยินดีต้อนรับ ${result.name}`);
-    }
-    
-    // Update user box
-    if (typeof renderUserBox === 'function') {
-      renderUserBox(result);
-    }
-    
-    // Redirect to calendar
-    setTimeout(() => {
-      if (typeof loadView === 'function') {
-        loadView('calendar');
-      } else {
-        console.log('✅ Login complete - should redirect to calendar');
-        location.reload();
-      }
-    }, 1500);
-    
-  } else {
-    console.error('❌ Invalid login response:', result);
-    handleLoginError('เกิดข้อผิดพลาดในการเข้าสู่ระบบ', btn);
-  }
-}
-
-function handleLoginError(errorMessage, btn) {
-  console.error('❌ Login error:', errorMessage);
-  
-  if (btn) {
-    btn.disabled = false;
-    btn.innerHTML = 'เข้าสู่ระบบ';
-  }
-  
-  if (typeof Swal !== 'undefined') {
-    Swal.fire({
-      icon: 'error',
-      title: 'เข้าสู่ระบบไม่สำเร็จ',
-      text: errorMessage
-    });
-  } else {
-    alert('เข้าสู่ระบบไม่สำเร็จ: ' + errorMessage);
-  }
-}
-
-function loadBookingFormView() {
-  // เพิ่มบรรทัดนี้
-  const sessionToken = localStorage.getItem('booking_session_token');
-  
-  google.script.run.withSuccessHandler(function(user) {
-    if (!user || !user.email) {
-      Swal.fire({
-        icon: 'info',
-        title: 'จำเป็นต้องเข้าสู่ระบบ',
-        text: 'กรุณาเข้าสู่ระบบก่อนทำการจองห้องประชุม',
-        showCancelButton: true,
-        confirmButtonText: 'เข้าสู่ระบบ',
-        cancelButtonText: 'ยกเลิก'
-      }).then((result) => {
-        if (result.isConfirmed) {
-          loadView('login');
-        }
-      });
-      return;
-    }
-
-    // ถ้าเข้าสู่ระบบแล้วค่อยโหลดแบบฟอร์ม
-    ensureAuth(() => {
-      loadView('form');
-    });
-
-  }).getSessionUser(sessionToken);
-}
-
-
-// 2. Override handleRegisterSubmit function
-function handleRegisterSubmit(event) {
-  event.preventDefault();
-  
-  console.log('📝 Register form submitted (DEBUG VERSION)');
-  
-  const form = event.target;
-  
-  // Get form data multiple ways
-  const name = document.getElementById('name')?.value?.trim() || document.getElementById('registerName')?.value?.trim();
-  const nickname = document.getElementById('nickname')?.value?.trim() || document.getElementById('registerNickname')?.value?.trim();
-  const email = document.getElementById('email')?.value?.trim() || document.getElementById('registerEmail')?.value?.trim();
-  const password = document.getElementById('password')?.value?.trim() || document.getElementById('registerPassword')?.value?.trim();
-  const phone = document.getElementById('phone')?.value?.trim() || document.getElementById('registerPhone')?.value?.trim();
-  
-  console.log('📋 Register data:', {
-    name: name,
-    nickname: nickname,
-    email: email,
-    passwordProvided: !!password,
-    phone: phone
-  });
-  
-  // Validate
-  if (!name) {
-    alert('กรุณากรอกชื่อ-นามสกุล');
-    return;
-  }
-  
-  if (!email) {
-    alert('กรุณากรอกอีเมล');
-    return;
-  }
-  
-  if (!password) {
-    alert('กรุณากรอกรหัสผ่าน');
-    return;
-  }
-  
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!emailRegex.test(email)) {
-    alert('รูปแบบอีเมลไม่ถูกต้อง');
-    return;
-  }
-  
-  const btn = document.getElementById('submitBtn') || document.getElementById('registerBtn');
-  if (btn) {
-    btn.disabled = true;
-    btn.innerHTML = '⏳ กำลังสมัคร...';
-  }
-  
-  const userData = {
-    name: name,
-    nickname: nickname || '',
-    email: email,
-    password: password,
-    phone: phone || ''
+function createTestUser() {
+  const timestamp = new Date().getTime();
+  const testUser = {
+    name: 'ผู้ทดสอบ ระบบ',
+    nickname: 'ทดสอบ',
+    email: `test${timestamp}@example.com`,
+    password: '123456',
+    phone: '0812345678'
   };
-  
-  console.log('🚀 Sending register data:', userData);
-  
-  if (typeof google !== 'undefined' && google.script && google.script.run) {
-    google.script.run
-      .withSuccessHandler(function(result) {
-        console.log('✅ Register successful:', result);
-        
-        if (btn) {
-          btn.disabled = false;
-          btn.innerHTML = 'สร้างบัญชี';
-        }
-        
-        if (typeof Swal !== 'undefined') {
-          Swal.fire({
-            icon: 'success',
-            title: 'สมัครสมาชิกสำเร็จ! 🎉',
-            text: 'กำลังไปหน้าเข้าสู่ระบบ...',
-            timer: 2000,
-            showConfirmButton: false
-          });
-        } else {
-          alert('สมัครสมาชิกสำเร็จ! กำลังไปหน้าเข้าสู่ระบบ...');
-        }
-        
-        form.reset();
-        
-        setTimeout(() => {
-          if (typeof loadView === 'function') {
-            loadView('login');
-          } else {
-            location.reload();
-          }
-        }, 2000);
-      })
-      .withFailureHandler(function(error) {
-        console.error('❌ Register failed:', error);
-        
-        if (btn) {
-          btn.disabled = false;
-          btn.innerHTML = 'สร้างบัญชี';
-        }
-        
-        if (typeof Swal !== 'undefined') {
-          Swal.fire({
-            icon: 'error',
-            title: 'สมัครไม่สำเร็จ',
-            text: error.message || 'เกิดข้อผิดพลาด'
-          });
-        } else {
-          alert('สมัครไม่สำเร็จ: ' + (error.message || 'เกิดข้อผิดพลาด'));
-        }
-      })
-      .registerUser(userData);
-  } else {
-    console.log('⚠️ Google Apps Script not available');
-    if (btn) {
-      btn.disabled = false;
-      btn.innerHTML = 'สร้างบัญชี';
-    }
-    alert('โหมดทดสอบ: เชื่อมต่อกับ Google Apps Script เพื่อใช้งานจริง');
+
+  try {
+    const result = registerUser(testUser);
+    console.log('✅ Test user created:', result);
+    return result;
+  } catch (err) {
+    console.error('❌ Test user creation failed:', err);
+    return { error: err.message };
   }
 }
 
-// 3. Global override - attach to window
-window.handleLoginSubmit = handleLoginSubmit;
-window.handleRegisterSubmit = handleRegisterSubmit;
+function forgotPasswordWithNew(email, newPassword) {
+  const sheet = SpreadsheetApp.getActive().getSheetByName('Users');
+  const data = sheet.getDataRange().getValues();
+  const emailCol = 4; // คอลัมน์ E
+  const passCol = 3;  // คอลัมน์ D
 
-// 4. Auto-attach event listeners when DOM is ready
-document.addEventListener('DOMContentLoaded', function() {
-  console.log('🔧 Attaching emergency event listeners...');
-  
-  // Login form
-  const loginForm = document.getElementById('loginForm');
-  if (loginForm) {
-    loginForm.onsubmit = handleLoginSubmit;
-    console.log('✅ Login form handler attached');
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][emailCol - 1] === email) {
+      const hash = Utilities.base64Encode(
+        Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, newPassword)
+      );
+      sheet.getRange(i + 1, passCol).setValue(hash); // ✅ อัปเดตรหัสผ่านแบบ Hash
+      return;
+    }
   }
-  
-  // Register form
-  const registerForm = document.getElementById('registerForm');
-  if (registerForm) {
-    registerForm.onsubmit = handleRegisterSubmit;
-    console.log('✅ Register form handler attached');
-  }
-});
 
-// 5. Periodic check for forms (in case they're loaded dynamically)
-setInterval(function() {
-  const loginForm = document.getElementById('loginForm');
-  const registerForm = document.getElementById('registerForm');
-  
-  if (loginForm && !loginForm.onsubmit) {
-    loginForm.onsubmit = handleLoginSubmit;
-    console.log('🔧 Login form handler re-attached');
-  }
-  
-  if (registerForm && !registerForm.onsubmit) {
-    registerForm.onsubmit = handleRegisterSubmit;
-    console.log('🔧 Register form handler re-attached');
-  }
-}, 2000);
-
-console.log('✅ Emergency frontend fixes loaded');
-</script>
-
-<script>
-  document.addEventListener('DOMContentLoaded', () => {
-  const forgotForm = document.getElementById('forgotForm');
-  if (forgotForm) {
-    forgotForm.addEventListener('submit', function(e) {
-      e.preventDefault();
-
-      const email = document.getElementById('forgotEmail').value.trim();
-      const password = document.getElementById('newPassword').value;
-
-      if (!email || !password) {
-        Swal.fire('กรุณากรอกอีเมลและรหัสผ่าน');
-        return;
-      }
-
-      google.script.run
-        .withSuccessHandler(() => {
-          Swal.fire('เปลี่ยนรหัสผ่านสำเร็จ', '', 'success').then(() => {
-            loadView('login');
-          });
-        })
-        .withFailureHandler(error => {
-          Swal.fire('เกิดข้อผิดพลาด', error.message || error, 'error');
-        })
-        .resetPassword({ email, password }); // ✅ ส่งแบบเดียวกับ Register
-    });
-  }
-});
-</script>
+  throw new Error("ไม่พบอีเมลในระบบ");
+}
