@@ -24,7 +24,7 @@
 
 <body>
   <!-- Sidebar Navigation -->
-  <nav class="sidebar <?= view === 'calendarlist' ? 'hide-sidebar' : '' ?>">
+  <nav class="sidebar">
     <h5>🏢 ระบบจองห้องประชุม</h5>
 
     <!-- User Info Section -->
@@ -50,7 +50,7 @@
   </nav>
 
   <!-- Main Content Area -->
-  <main class="main <?= view === 'calendarlist' ? 'fullpage' : '' ?>">
+  <main class="main">
     <div id="mainContent">
       <!-- Dynamic content will be loaded here -->
       <div class="loading-placeholder">
@@ -289,9 +289,6 @@
     // Load view function
     function loadView(viewName, forceRefresh = false) {
       console.log('📄 Loading view:', viewName);
-
-      // ✅ บอกให้ทุกที่รู้ว่า view ปัจจุบันคืออะไร
-      window.currentView = viewName;
       
       const mainContent = document.getElementById('mainContent');
       if (!mainContent) {
@@ -323,11 +320,11 @@
         login: 'Login',
         register: 'Register',
         forgot: 'ForgotPassword',
-        calendarlist: 'CalendarList'   // ✅ เพิ่มตัวนี้ด้วยถ้ายังไม่ได้ใส่
       };
 
       const templateName = viewMap[viewName] || 'CalendarView';
       
+      // Load from Google Apps Script
       if (typeof google !== 'undefined' && google.script && google.script.run && google.script.run.include) {
         google.script.run
           .withSuccessHandler(function(html) {
@@ -351,12 +348,12 @@
           })
           .include(templateName);
       } else {
+        // Fallback when Google Apps Script is not available
         console.error('❌ Google Apps Script not available');
         mainContent.innerHTML = getFallbackContent(viewName);
         handleViewLoaded(viewName);
       }
-}
-
+    }
 
     // Handle post-load actions
     function handleViewLoaded(viewName) {
@@ -658,12 +655,8 @@
     if (typeof restoreSession === 'function') restoreSession();
   });
   </script>
-  <script>
-    window.addEventListener("DOMContentLoaded", () => {
-      const view = "<?= view ?>";
-      loadView(view);
-    });
-  </script>
+
+  
 
 </body>
 
