@@ -490,12 +490,12 @@
 
   /* Events */
   .fc-event {
-    background: var(--event-color) !important;
-    color: white !important;
+    /* background: var(--event-color) !important; */
+    color: #202124 !important;
     border: none !important;
     border-radius: 4px !important;
     padding: 2px 6px !important;
-    font-weight: 500 !important;
+    font-weight: 450 !important;
     font-size: 12px !important;
     margin: 1px 2px !important;
     cursor: pointer !important;
@@ -943,6 +943,31 @@
     color: #8ab4f8;
   }
 
+  .availability-status {
+    margin-top: 12px;
+    padding: 12px;
+    border-radius: 8px;
+    display: none;
+  }
+
+  .availability-status.show {
+    display: block;
+  }
+
+  .availability-status.available {
+    background: #e6f4ea;
+    color: #137333;
+  }
+
+  .availability-status.conflict {
+    background: #fce8e6;
+    color: #c5221f;
+  }
+
+  .availability-status.checking {
+    background: #e8f0fe;
+    color: #1967d2;
+  }
   /* ========== CALENDAR ACTIONS ========== */
   .calendar-actions {
     display: flex;
@@ -1499,5 +1524,157 @@
   transition: all 0.2s ease;
 }
 
+/* ===== ROOM COLORS ===== */
+.fc-event.room-MR1 {
+  background-color: #A1CEFF !important;
+  color: #000000 !important;
+}
 
+.fc-event.room-MR2 {
+  background-color: #FFC7A1 !important;
+  color: #000000 !important;
+}
+
+.fc-event.room-MR3 {
+  background-color: #FFA1AA !important;
+  color: #000000 !important;
+}
+
+.fc-event.room-MR4 {
+  background-color: #D2A1FF !important;
+  color: #000000 !important;
+}
+
+/* ===== STATUS INDICATORS ===== */
+.status-indicator {
+  display: inline-block;
+  width: 12px;              /* ← เพิ่มขนาดจาก 8px → 12px */
+  height: 12px;
+  border-radius: 50%;
+  margin-right: 8px;
+  vertical-align: middle;
+  flex-shrink: 0;
+  border: 2px solid white; /* ← เพิ่มขอบขาว */
+  box-shadow: 0 0 0 1px rgba(0,0,0,0.2); /* ← เพิ่มเงา */
+}
+
+.status-upcoming {
+  background-color: #FF9800 !important; /* ← เปลี่ยนเป็นส้มสดใส */
+  box-shadow: 0 0 8px rgba(255, 152, 0, 0.8), 0 0 0 1px rgba(0,0,0,0.2);
+}
+
+.status-ongoing {
+  background-color: #4CAF50 !important;
+  box-shadow: 0 0 8px rgba(76, 175, 80, 0.8), 0 0 0 1px rgba(0,0,0,0.2);
+  animation: pulse 2s infinite;
+}
+
+.status-completed {
+  background-color: #9E9E9E !important;
+  box-shadow: 0 0 0 1px rgba(0,0,0,0.2);
+}
+
+/* Animation สำหรับ ongoing events */
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.7;
+    transform: scale(1.1);
+  }
+}
+
+/* Style สำหรับ list view events */
+.fc-list-event.event-status-upcoming {
+  border-left: 3px solid #FFC107 !important;
+}
+
+.fc-list-event.event-status-ongoing {
+  border-left: 3px solid #4CAF50 !important;
+  background-color: rgba(76, 175, 80, 0.05) !important;
+}
+
+.fc-list-event.event-status-completed {
+  border-left: 3px solid #9E9E9E !important;
+  opacity: 0.7;
+}
+
+/* Dark theme adjustments */
+[data-theme="dark"] .fc-list-event.event-status-ongoing {
+  background-color: rgba(76, 175, 80, 0.1) !important;
+}
+
+/* List event title with indicator */
+.fc-list-event-title {
+  display: flex;
+  align-items: center;
+}
+
+/* ===== Hidden Event Class ===== */
+.fc-event.hidden-event {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+}
+
+/* ===== Force Remove Dots After Toggle ===== */
+.fc-event[style*="display: block"] .fc-daygrid-event-dot,
+.fc-event[style*="display: auto"] .fc-daygrid-event-dot {
+  display: none !important;
+}
+
+/* ===== FORCE HIDE ALL DEFAULT DOTS ===== */
+/* ซ่อนจุดทุกประเภทใน FullCalendar */
+.fc-list-event-dot,
+.fc-daygrid-event-dot,
+.fc-event-dot,
+.fc-list-event-graphic {
+  display: none !important;
+  visibility: hidden !important;
+  width: 0 !important;
+  height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  opacity: 0 !important;
+}
+
+/* ซ่อน wrapper ของ dot */
+.fc-list-event .fc-list-event-graphic {
+  display: none !important;
+}
+
+/* ซ่อน dot ที่เป็น border-color */
+.fc-list-event::before,
+.fc-list-event-dot::before {
+  display: none !important;
+  content: none !important;
+}
+
+/* แสดงเฉพาะ status indicator ของเรา */
+.status-indicator {
+  display: inline-block !important;
+  visibility: visible !important;
+}
+
+/* ===== FIX: List View Text Color in Dark Mode ===== */
+[data-theme="dark"] .fc-list-day-text,
+[data-theme="dark"] .fc-list-day-side-text {
+  color: var(--google-gray-900) !important; /* สีดำ */
+  font-weight: 600 !important;
+}
+
+[data-theme="dark"] .fc-list-event-time {
+  color: var(--google-gray-900) !important; /* เวลาเป็นสีดำ */
+}
+
+[data-theme="dark"] .fc-list-event-title {
+  color: var(--google-gray-900) !important; /* ชื่อ event เป็นสีดำ */
+}
+
+/* ===== เพิ่ม contrast ให้ชัดขึ้น ===== */
+[data-theme="dark"] .fc-list-day {
+  background-color: rgba(255, 255, 255, 0.1) !important; /* พื้นหลังโปร่งแสงนิดหน่อย */
+}
 </style>
