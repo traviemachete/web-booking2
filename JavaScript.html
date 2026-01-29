@@ -501,38 +501,6 @@ function logout() {
   }
 }
 
-
-function checkAuthAndNavigate(viewName) {
-  // ใช้ session ที่ดึงมาก่อนหน้า (เช่นจาก renderUserBox)
-  const sessionToken = localStorage.getItem('booking_session_token');
-  if (window.currentUser) {
-    loadView(viewName);
-    return;
-  }
-
-  // fallback: ดึง session แบบ async ถ้าไม่เคย login
-  google.script.run.withSuccessHandler(user => {
-    if (user) {
-      window.currentUser = user;
-      loadView(viewName);
-    } else {
-      Swal.fire({
-        icon: 'info',
-        title: 'จำเป็นต้องเข้าสู่ระบบ',
-        text: 'กรุณาเข้าสู่ระบบเพื่อทำการจองห้องประชุม',
-        showCancelButton: true,
-        confirmButtonText: 'เข้าสู่ระบบ',
-        cancelButtonText: 'ยกเลิก'
-      }).then(result => {
-        if (result.isConfirmed) {
-          loadView('login');
-        }
-      });
-    }
-  }).getSessionUser(sessionToken);
-}
-
-
 /* ========== CALENDAR MANAGEMENT ========== */
 
 function renderCalendar(events = []) {
@@ -606,12 +574,28 @@ function renderCalendar(events = []) {
         checkAuthAndNavigate('form');
       }
     },
-    
+
     // Event styling
     eventDidMount: function(info) {
       info.el.setAttribute('title', `${info.event.title}\nคลิกเพื่อดูรายละเอียด`);
+      
+      // ✅ เพิ่ม class ตามห้อง
+      const room = info.event.extendedProps?.room;
+      if (room) {
+        info.el.classList.add(`room-${room}`);
+      }
+      
+      // ✅ แยก logic ตาม view type
+      const viewType = info.view.type;
+      
+      if (viewType === 'listWeek' || viewType === 'listMonth') {
+        // List View: แสดง status indicator (จุดสี)
+        addStatusIndicator(info);
+      } else {
+        // Calendar View: ซ่อนจุดสีทั้งหมด
+        removeEventDots(info.el);
+      }
     },
-    
     // Loading states
     loading: function(isLoading) {
       toggleLoadingState(isLoading);
@@ -626,7 +610,87 @@ function renderCalendar(events = []) {
   // Render the calendar
   calendar.render();
   
+  // ✅ สำคัญมาก! เก็บ reference ไว้ใน window
+  window.calendar = calendar;
+  
   console.log(`📅 Calendar rendered with ${events.length} events`);
+}
+
+// ✅ ฟังก์ชันเพิ่ม status indicator (ปรับปรุง)
+function addStatusIndicator(info) {
+  // ซ่อน default dot ของ FullCalendar ก่อน
+  removeEventDots(info.el);
+  
+  const event = info.event;
+  const now = new Date(); // เวลาปัจจุบัน
+  
+  // ✅ แปลง start/end เป็น Date object ให้แน่ใจ
+  const startTime = new Date(event.start);
+  const endTime = new Date(event.end);
+  
+  // กำหนด status
+  let status = 'upcoming'; // default
+  let statusColor = '#FF9800'; // ✅ เปลี่ยนเป็นส้มสดใส (แทนเหลืองจาง)
+  let statusText = 'ยังไม่เริ่ม';
+  
+  if (now >= startTime && now < endTime) {
+    status = 'ongoing';
+    statusColor = '#4CAF50'; // เขียว
+    statusText = 'กำลังดำเนินการ';
+  } else if (now >= endTime) {
+    status = 'completed';
+    statusColor = '#9E9E9E'; // เทา
+    statusText = 'จบแล้ว';
+  }
+  
+  // 🐛 Debug log
+  console.log('✅ Final status:', status, statusText);
+  
+  // สร้าง indicator dot
+  const dot = document.createElement('span');
+  dot.className = `status-indicator status-${status}`;
+  dot.style.cssText = `
+    display: inline-block !important;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background-color: ${statusColor} !important;
+    margin-right: 8px;
+    vertical-align: middle;
+    flex-shrink: 0;
+    border: 2px solid white;
+    box-shadow: 0 0 8px ${statusColor}80, 0 0 0 1px rgba(0,0,0,0.2);
+  `;
+  dot.setAttribute('title', statusText);
+  
+  // แทรก dot ด้านหน้า title
+  const titleEl = info.el.querySelector('.fc-list-event-title, .fc-event-title');
+  if (titleEl) {
+    // ลบ dot เก่าถ้ามี
+    const oldDot = titleEl.querySelector('.status-indicator');
+    if (oldDot) oldDot.remove();
+    
+    // เพิ่ม dot ใหม่
+    titleEl.insertBefore(dot, titleEl.firstChild);
+  }
+  
+  // เพิ่ม class สำหรับ styling เพิ่มเติม
+  // info.el.classList.add(`event-status-${status}`);
+}
+
+// ✅ ฟังก์ชันซ่อนจุดสีใน Calendar View
+function removeEventDots(element) {
+  if (!element) return;
+  
+  // ลบ dot elements ทั้งหมด
+  const dots = element.querySelectorAll('.fc-daygrid-event-dot, .fc-list-event-dot, .fc-event-dot');
+  dots.forEach(dot => {
+    dot.style.display = 'none';
+    dot.remove();
+  });
+  
+  // เพิ่ม class เพื่อป้องกันการแสดง dot
+  element.classList.add('no-event-dot');
 }
 
 function showEventDetails(event) {
@@ -646,15 +710,18 @@ function showEventDetails(event) {
     day: 'numeric'
   }) : 'ไม่ระบุ';
 
+  // ✅ เพิ่มการแปลงชื่อห้อง
+  const roomName = getRoomDisplayName(props.room);
+
   if (typeof Swal !== 'undefined') {
     Swal.fire({
       title: '📋 รายละเอียดการจอง',
       html: `
         <div style="text-align: left; margin: 16px 0; line-height: 1.6;">
-          <div style="background: var(--bg-secondary); padding: 16px; border-radius: 8px; margin-bottom: 16px;">
-            // <h4 style="margin: 0 0 8px 0; color: var(--text-color);">${event.title}</h4>
+          <div style="background: var(--bg-secondary); padding: 16px; border-radius: 8px; margin-bottom: 16px;">   
             <p style="margin: 4px 0; color: var(--text-secondary);"><strong>📅 วันที่:</strong> ${eventDate}</p>
             <p style="margin: 4px 0; color: var(--text-secondary);"><strong>⏰ เวลา:</strong> ${startTime} - ${endTime}</p>
+            <p style="margin: 4px 0; color: var(--text-secondary);"><strong>🚪 ห้องประชุม:</strong> ${roomName}</p>
           </div>
           <p style="margin: 8px 0;"><strong>👤 ผู้จอง:</strong> ${props.booker || 'ไม่ระบุ'}</p>
           <p style="margin: 8px 0;"><strong>🏢 ฝ่าย:</strong> ${props.department || 'ไม่ระบุ'}</p>
@@ -677,6 +744,28 @@ function showEventDetails(event) {
       }
     });
   }
+}
+
+// ✅ เพิ่มฟังก์ชันแปลงชื่อห้อง
+function getRoomDisplayName(roomCode) {
+  const roomNames = {
+    'MR1': 'ห้องประชุม 1',
+    'MR2': 'ห้องประชุม 2',
+    'MR3': 'ห้องประชุม 3',
+    'MR4': 'ห้องประชุม 4'
+  };
+  return roomNames[roomCode] || roomCode || 'ไม่ระบุ';
+}
+
+// ✅ เพิ่มฟังก์ชันแปลงชื่อห้องพร้อมสี
+function getRoomInfo(roomCode) {
+  const rooms = {
+    'MR1': { name: 'ห้องประชุม 1', color: '#1E88E5' },
+    'MR2': { name: 'ห้องประชุม 2', color: '#43A047' },
+    'MR3': { name: 'ห้องประชุม 3', color: '#FB8C00' },
+    'MR4': { name: 'ห้องประชุม 4', color: '#8E24AA' }
+  };
+  return rooms[roomCode] || { name: roomCode || 'ไม่ระบุ', color: '#90a4ae' };
 }
 
 function refreshCalendarData() {
@@ -730,6 +819,7 @@ function handleSubmit(event) {
   // Collect form data
   const formData = new FormData(form);
   const bookingData = {
+    room: formData.get('roomId'),
     date: formData.get('date'),
     start: formData.get('start'),
     end: formData.get('end'),
@@ -1161,6 +1251,79 @@ function getSampleEvents() {
     }
   ];
 }
+
+/* ========== ROOM FILTER FUNCTION ========== */
+function toggleRoomFilter(room, isChecked) {
+  console.log(`🎨 Toggle room filter: ${room} = ${isChecked}`);
+  
+  if (!window.calendar) {
+    console.warn('⚠️ Calendar object not found');
+    return;
+  }
+  
+  try {
+    const allEvents = window.calendar.getEvents();
+    
+    if (!allEvents || allEvents.length === 0) {
+      console.warn('⚠️ No events found');
+      return;
+    }
+    
+    let affectedCount = 0;
+    
+    allEvents.forEach(event => {
+      const eventRoom = event.extendedProps?.room;
+      
+      if (eventRoom === room) {
+        // ✅ ใช้ CSS class แทน setProp เพื่อไม่ให้ re-render
+        const el = event._def?.ui?.classNames || [];
+        
+        if (isChecked) {
+          // แสดง event
+          event.setProp('display', 'block');
+          event.setProp('classNames', el.filter(c => c !== 'hidden-event'));
+        } else {
+          // ซ่อน event โดยไม่ re-render
+          event.setProp('display', 'none');
+          event.setProp('classNames', [...el, 'hidden-event']);
+        }
+        
+        affectedCount++;
+      }
+    });
+    
+    console.log(`✅ ${isChecked ? 'แสดง' : 'ซ่อน'} ${affectedCount} events ของห้อง ${room}`);
+    
+  } catch (error) {
+    console.error('❌ Error in toggleRoomFilter:', error);
+  }
+}
+
+// Helper function สำหรับใช้ getApi()
+// function toggleRoomFilterWithApi(calendarApi, room, isChecked) {
+//   try {
+//     const allEvents = calendarApi.getEvents();
+//     let affectedCount = 0;
+    
+//     allEvents.forEach(event => {
+//       const eventRoom = event.extendedProps?.room;
+//       if (eventRoom === room) {
+//         event.setProp('display', isChecked ? 'auto' : 'none');
+//         affectedCount++;
+//       }
+//     });
+    
+//     console.log(`✅ ${isChecked ? 'แสดง' : 'ซ่อน'} ${affectedCount} events ของห้อง ${room}`);
+//   } catch (error) {
+//     console.error('❌ Error in toggleRoomFilterWithApi:', error);
+//   }
+// }
+
+// Export to window
+window.toggleRoomFilter = toggleRoomFilter;
+
+// Export to window for global access
+window.toggleRoomFilter = toggleRoomFilter;
 
 /* ========== REFRESH CALENDAR ========== */
 
@@ -1872,6 +2035,7 @@ setInterval(function() {
 }, 2000);
 
 console.log('✅ Emergency frontend fixes loaded');
+
 </script>
 
 <script>
