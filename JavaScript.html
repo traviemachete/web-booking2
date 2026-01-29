@@ -1252,7 +1252,7 @@ function getSampleEvents() {
   ];
 }
 
-/* ========== ROOM FILTER FUNCTION ========== */
+/* ========== ROOM FILTER FUNCTION (FIXED) ========== */
 function toggleRoomFilter(room, isChecked) {
   console.log(`🎨 Toggle room filter: ${room} = ${isChecked}`);
   
@@ -1275,17 +1275,12 @@ function toggleRoomFilter(room, isChecked) {
       const eventRoom = event.extendedProps?.room;
       
       if (eventRoom === room) {
-        // ✅ ใช้ CSS class แทน setProp เพื่อไม่ให้ re-render
-        const el = event._def?.ui?.classNames || [];
-        
         if (isChecked) {
-          // แสดง event
-          event.setProp('display', 'block');
-          event.setProp('classNames', el.filter(c => c !== 'hidden-event'));
+          // แสดง event - ลบ display: none
+          event.setProp('display', 'auto');
         } else {
-          // ซ่อน event โดยไม่ re-render
+          // ซ่อน event - เพิ่ม display: none
           event.setProp('display', 'none');
-          event.setProp('classNames', [...el, 'hidden-event']);
         }
         
         affectedCount++;
@@ -1299,25 +1294,8 @@ function toggleRoomFilter(room, isChecked) {
   }
 }
 
-// Helper function สำหรับใช้ getApi()
-// function toggleRoomFilterWithApi(calendarApi, room, isChecked) {
-//   try {
-//     const allEvents = calendarApi.getEvents();
-//     let affectedCount = 0;
-    
-//     allEvents.forEach(event => {
-//       const eventRoom = event.extendedProps?.room;
-//       if (eventRoom === room) {
-//         event.setProp('display', isChecked ? 'auto' : 'none');
-//         affectedCount++;
-//       }
-//     });
-    
-//     console.log(`✅ ${isChecked ? 'แสดง' : 'ซ่อน'} ${affectedCount} events ของห้อง ${room}`);
-//   } catch (error) {
-//     console.error('❌ Error in toggleRoomFilterWithApi:', error);
-//   }
-// }
+// Export to window
+window.toggleRoomFilter = toggleRoomFilter;
 
 // Export to window
 window.toggleRoomFilter = toggleRoomFilter;
