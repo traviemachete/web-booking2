@@ -1,4 +1,3 @@
-
 /* ------------ Code.gs ------------ */
 const SHEET_NAME = 'Sheet1';
 const TZ = 'Asia/Bangkok';
