@@ -30,26 +30,40 @@
   <!-- Calendar Display Area -->
   <div id="calendar"></div>
 
-  <!-- Calendar Footer with Quick Info -->
-  <div class="calendar-footer">
-    <div class="calendar-legend">
-      <div class="legend-item">
-        <span class="legend-color" style="background: var(--google-blue);"></span>
-        <span>การจองปกติ</span>
-      </div>
-      <div class="legend-item">
-        <span class="legend-color" style="background: #ea4335;"></span>
-        <span>ยกเลิกแล้ว</span>
-      </div>
-      <div class="legend-item">
-        <span class="legend-color" style="background: #34a853;"></span>
-        <span>เสร็จสิ้นแล้ว</span>
-      </div>
-    </div>
+  <!-- Calendar Footer : Room Legend -->
+  <div class="calendar-legend room-legend">
+    <label class="legend-item">
+      <input type="checkbox" checked data-room="MR1" onchange="toggleRoomFilter('MR1', this.checked)">
+      <span class="legend-color mr1"></span>
+      ห้องประชุม 1
+    </label>
+
+    <label class="legend-item">
+      <input type="checkbox" checked data-room="MR2" onchange="toggleRoomFilter('MR2', this.checked)">
+      <span class="legend-color mr2"></span>
+      ห้องประชุม 2
+    </label>
+
+    <label class="legend-item">
+      <input type="checkbox" checked data-room="MR3" onchange="toggleRoomFilter('MR3', this.checked)">
+      <span class="legend-color mr3"></span>
+      ห้องประชุม 3
+    </label>
+
+    <label class="legend-item">
+      <input type="checkbox" checked data-room="MR4" onchange="toggleRoomFilter('MR4', this.checked)">
+      <span class="legend-color mr4"></span>
+      ห้องประชุม 4
+    </label>
   </div>
-</div>
 
 <style>
+
+  .legend-color.mr1 { background: #A1CEFF; } /* ฟ้า */
+  .legend-color.mr2 { background: #FFC7A1; } /* เขียว */
+  .legend-color.mr3 { background: #FFA1AA; } /* ชมพู */
+  .legend-color.mr4 { background: #D2A1FF; } /* ม่วง */
+
   .calendar-actions {
     display: flex;
     gap: 8px;
@@ -229,6 +243,21 @@
       width: 10px;
       height: 10px;
     }
+
+    /* ===== Room Legend ===== */
+    .room-legend {
+      justify-content: center;
+    }
+
+    .room-legend .legend-item {
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .room-legend input {
+      margin-right: 6px;
+      cursor: pointer;
+    }
   }
 </style>
 
@@ -326,6 +355,30 @@
     }
   }
 
+    // ฟังก์ชันสำหรับซ่อน/แสดง event ตามห้อง
+  function toggleRoomFilter(room, isChecked) {
+    if (!window.calendar) {
+      console.warn('Calendar not initialized yet');
+      return;
+    }
+
+    // ดึง events ทั้งหมด
+    const allEvents = window.calendar.getEvents();
+    
+    // วนหาแค่ event ของห้องที่เลือก
+    allEvents.forEach(event => {
+      const eventRoom = event.extendedProps?.room;
+      
+      if (eventRoom === room) {
+        // ถ้า checkbox ติ๊ก → แสดง event
+        // ถ้าไม่ติ๊ก → ซ่อน event
+        event.setProp('display', isChecked ? 'auto' : 'none');
+      }
+    });
+    
+    console.log(`${isChecked ? 'แสดง' : 'ซ่อน'} ห้อง ${room}`);
+  }
+
   // Initialize theme toggle in header when view loads
   document.addEventListener('DOMContentLoaded', function() {
     // Sync header toggle with main toggle
@@ -363,4 +416,37 @@
 
   // Initialize when this view loads
   setTimeout(initializeThemeToggle, 100);
+
+    // Initialize room filter when calendar view loads
+  function initRoomFilters() {
+    console.log('🎨 Initializing room filters...');
+    
+    const checkboxes = document.querySelectorAll('.room-legend input[type="checkbox"]');
+    
+    if (!checkboxes || checkboxes.length === 0) {
+      console.warn('⚠️ No filter checkboxes found');
+      return;
+    }
+    
+    checkboxes.forEach(checkbox => {
+      checkbox.addEventListener('change', function() {
+        const room = this.dataset.room;
+        const isChecked = this.checked;
+        
+        console.log(`Checkbox changed: ${room} = ${isChecked}`);
+        
+        if (typeof window.toggleRoomFilter === 'function') {
+          window.toggleRoomFilter(room, isChecked);
+        } else {
+          console.error('toggleRoomFilter function not found!');
+        }
+      });
+    });
+    
+    console.log('✅ Room filters initialized');
+  }
+
+  // เรียกใช้หลังจากที่ calendar โหลดเสร็จ
+  setTimeout(initRoomFilters, 500);
 </script>
+
