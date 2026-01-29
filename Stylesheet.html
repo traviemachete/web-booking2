@@ -513,6 +513,16 @@
     white-space: nowrap !important;
     overflow: hidden !important;
     text-overflow: ellipsis !important;
+    font-weight: 450 !important; 
+  }
+
+  .fc-list-event-title {
+    font-weight: 450 !important;
+  }
+
+  .fc-event-time,
+  .fc-list-event-time {
+    font-weight: 450 !important;
   }
 
   /* Popover */
@@ -1676,5 +1686,12 @@
 /* ===== เพิ่ม contrast ให้ชัดขึ้น ===== */
 [data-theme="dark"] .fc-list-day {
   background-color: rgba(255, 255, 255, 0.1) !important; /* พื้นหลังโปร่งแสงนิดหน่อย */
+}
+
+/* ===== Hidden Event Class ===== */
+.fc-event.room-hidden {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
 }
 </style>
