@@ -29,6 +29,26 @@
           <div class="form-help">เลือกวันที่ต้องการจองห้องประชุม</div>
         </div>
 
+        <div class="form-group">
+          <label for="room" class="form-label">
+            ห้องประชุม <span class="text-red-500">*</span>
+          </label>
+
+          <select
+            id="roomId"
+            name="roomId"
+            required
+            class="form-input"
+          >
+            <option value="">-- เลือกห้องประชุม --</option>
+            <option value="MR1">ห้องประชุม 1</option>
+            <option value="MR2">ห้องประชุม 2</option>
+            <option value="MR3">ห้องประชุม 3</option>
+            <option value="MR4">ห้องประชุม 4</option>
+          </select>
+        </div>
+
+
         <div class="form-row">
           <div class="form-group">
             <label class="form-label" for="start">
@@ -83,7 +103,7 @@
               <option value="Bygge">Bygge</option>
               <option value="Benya">Benya</option>
               <option value="M BARK">M BARK</option>
-              <option value="Farmpa Organic">Farmpa Organic</option>
+              <option value="Farmpa Organic">Big Dream</option>
               <option value="อื่นๆ">อื่นๆ</option>
             </select>
           </div>
@@ -671,27 +691,21 @@
   // Enhanced form submission with better UX
   function handleSubmit(event) {
     event.preventDefault();
-    
+
     const form = event.target;
     const submitBtn = document.getElementById('submit-btn');
-    
-    // Validate all fields
+
+    // 1. Validate all fields
     const inputs = form.querySelectorAll('.form-input[required]');
     let isFormValid = true;
-    
+
     inputs.forEach(input => {
       if (!validateField(input)) {
         isFormValid = false;
       }
     });
 
-    // Validate time range
-    if (!validateTimeRange()) {
-      isFormValid = false;
-    }
-
-    if (!isFormValid) {
-      // Scroll to first error
+    if (!validateTimeRange() || !isFormValid) {
       const firstError = form.querySelector('.form-input.error');
       if (firstError) {
         firstError.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -700,15 +714,40 @@
       return false;
     }
 
-    // Show loading state
+    // 2. แสดงสถานะกำลังโหลด
     submitBtn.disabled = true;
     submitBtn.classList.add('btn-loading');
-    
-    // Use the global handleSubmit function
-    if (typeof window.handleSubmit === 'function') {
-      return window.handleSubmit(event);
-    }
-    
+
+    // 3. รวบรวมข้อมูลให้ตรงกับที่ Code.gs ต้องการ (Matching keys)
+    const formData = {
+      date: form.date.value,
+      room: form.roomId.value,
+      start: form.start.value,   // เปลี่ยนจาก startTime เป็น start
+      end: form.end.value,       // เปลี่ยนจาก endTime เป็น end
+      name: form.name.value,
+      department: form.department.value,
+      company: form.company.value,
+      purpose: form.purpose.value,
+      email: form.email.value
+    };
+
+    console.log('ROOM =', formData.room); //
+
+    // 4. ส่งข้อมูลไปที่ Code.gs
+    google.script.run
+      .withSuccessHandler((res) => {
+        alert('บันทึกการจองสำเร็จ!');
+        submitBtn.classList.remove('btn-loading');
+        submitBtn.disabled = false;
+        loadView('calendar'); // กลับไปหน้าปฏิทินเมื่อสำเร็จ
+      })
+      .withFailureHandler((err) => {
+        alert('เกิดข้อผิดพลาด: ' + err.message);
+        submitBtn.classList.remove('btn-loading');
+        submitBtn.disabled = false;
+      })
+      .submitBooking(formData);
+
     return false;
   }
 
