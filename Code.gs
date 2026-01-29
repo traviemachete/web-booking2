@@ -55,6 +55,13 @@ function testHash() {
 /* -------------------------------------------------- */
 /*  CALENDAR API  (→ FullCalendar)                    */
 /* -------------------------------------------------- */
+const ROOM_COLORS = {
+  MR1: '#A1CEFF', // ฟ้า
+  MR2: '#FFC7A1', // เขียว
+  MR3: '#FFA1AA', // ชมพู
+  MR4: '#D2A1FF'  // ม่วง
+};
+
 function listEvents() {
   const sh = SpreadsheetApp.getActive().getSheetByName(SHEET_NAME);
   const rows = sh.getDataRange().getValues();
@@ -62,8 +69,22 @@ function listEvents() {
 
   for (let i = 1; i < rows.length; i++) {
     const r = rows[i];
-    const [id, date, startT, endT, name, department, company, purpose, email, timestamp, status] =
-      [r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8], r[9], r[10]];
+    const [
+          id,
+          date,
+          startT,
+          endT,
+          name,
+          department,
+          company,
+          purpose,
+          email,
+          timestamp,
+          status,
+          room        // ✅ เพิ่มตรงนี้
+        ] = r;
+
+
 
     const startObj = mergeDateTime(date, startT);
     const endObj = mergeDateTime(date, endT);
@@ -74,15 +95,18 @@ function listEvents() {
 
     const stat = String(status || '').toLowerCase();
     const color = stat === 'cancelled' ? '#e57373' : '#81c784';
+    const roomColor = ROOM_COLORS[room] || '#90a4ae'; // สี default
 
     events.push({
       id,
-      title: `${(purpose || 'ประชุม').substring(0, 50)}`,
+      title: `| ${room} | ${(purpose || 'ประชุม').substring(0, 30)}`,
       start,
       end,
-      backgroundColor: color,
-      borderColor: color,
+      backgroundColor: roomColor,
+      borderColor: roomColor,
+      textColor: '#37393E',
       extendedProps: {
+        room,
         booker: name,
         department,
         company,
@@ -100,7 +124,7 @@ function listEvents() {
 /*  BOOKING API                                       */
 /* -------------------------------------------------- */
 function submitBooking(data) {
-  const clash = isDuplicate(data.date, data.start, data.end);
+  const clash = isDuplicate(data.date, data.start, data.end, data.room);
   if (clash.dup) throw new Error(clash.msg);
 
   const sh = SpreadsheetApp.getActive().getSheetByName(SHEET_NAME);
@@ -118,7 +142,8 @@ function submitBooking(data) {
     data.purpose,
     data.email,
     now,
-    ''
+    '',
+    data.room
   ]);
   return { status: 'ok' };
 }
@@ -126,34 +151,41 @@ function submitBooking(data) {
 /* -------------------------------------------------- */
 /*  DUPLICATE CHECK                                   */
 /* -------------------------------------------------- */
-function isDuplicate(dateISO, tStart, tEnd) {
+function isDuplicate(dateISO, tStart, tEnd, room) {
   const sh = SpreadsheetApp.getActive().getSheetByName(SHEET_NAME);
   const rows = sh.getDataRange().getValues().slice(1);
 
   const reqStart = new Date(`${dateISO}T${padTime(tStart)}:00`).getTime();
-  const reqEnd = new Date(`${dateISO}T${padTime(tEnd)}:00`).getTime();
+  const reqEnd   = new Date(`${dateISO}T${padTime(tEnd)}:00`).getTime();
 
   for (const r of rows) {
-    const [, d, st, et, booker] = r;
-    if (!d || !st || !et) continue;
+    const [, d, st, et, booker,,,, status,,, rRoom] = r; // ✅ แกะตัวแปรให้ตรง Column (rRoom คือ Col L)
+    
+    if (!d || !st || !et || !rRoom || status === 'cancelled') continue;
+
+    // ✅ ตรวจสอบว่าเป็นห้องเดียวกันหรือไม่
+    if (String(rRoom).trim() !== String(room).trim()) continue;
 
     const dISO = (d instanceof Date)
       ? Utilities.formatDate(d, TZ, 'yyyy-MM-dd')
-      : (String(d).includes('-') ? d : Utilities.formatDate(parseDDMMYYYY(d), TZ, 'yyyy-MM-dd'));
+      : Utilities.formatDate(parseDDMMYYYY(d), TZ, 'yyyy-MM-dd');
+
     if (dISO !== dateISO) continue;
 
     const slotStart = new Date(`${dISO}T${padTime(st)}:00`).getTime();
-    const slotEnd = new Date(`${dISO}T${padTime(et)}:00`).getTime();
+    const slotEnd   = new Date(`${dISO}T${padTime(et)}:00`).getTime();
 
     if (reqStart < slotEnd && reqEnd > slotStart) {
       return {
         dup: true,
-        msg: `ช่วง ${padTime(tStart)}‑${padTime(tEnd)} ถูกจองแล้วโดย “${booker}”\nกรุณาเลือกเวลาอื่นหรือติดต่อผู้ดูแล`
+        msg: `❌ ห้อง ${room} ถูกจองแล้ว\nช่วง ${padTime(st)}–${padTime(et)} โดย ${booker}`
       };
     }
   }
   return { dup: false };
 }
+
+
 function padTime(t) {
   if (t instanceof Date) return t.toTimeString().slice(0, 5);
   if (typeof t === 'number') {
@@ -737,4 +769,19 @@ function forgotPasswordWithNew(email, newPassword) {
   }
 
   throw new Error("ไม่พบอีเมลในระบบ");
+}
+
+function getRooms() {
+  const ss = SpreadsheetApp.getActive();
+  const sheet = ss.getSheetByName('Room');
+  const data = sheet.getDataRange().getValues();
+
+  // กรองเฉพาะห้องที่ status = TRUE (มีติ๊กถูก)
+  return data
+    .slice(1) // ข้าม header row
+    .filter(r => String(r[2]).toUpperCase() === 'TRUE') // Column C (status)
+    .map(r => ({
+      id: r[0],          // Column A (room)
+      name: r[1]         // Column B (description)
+    }));
 }
